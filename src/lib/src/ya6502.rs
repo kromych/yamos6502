@@ -115,14 +115,15 @@ impl Mos6502RegisterState {
 
     pub fn reset(&mut self) {
         // Hardware sets few flags, everything else is initialized
-        // by software
+        // by software.
         self.p.set(Status::INT_DIS, true);
         self.p.set(Status::_IGNORED, true);
         self.p.set(Status::BCD, false);
 
-        // Set the stack pointer (the datasheet doesn't mention that,
-        // most likely that is handled by boards as a part of reset)
-        self.sp = 0xfd;
+        // Stack pointer is not set! In some configurations that might
+        // not even useful, e.g. if the only type of memory is ROM.
+        // The software is expected to initialize the stack pointer to
+        // use interrupts and subroutine calls.
     }
 }
 

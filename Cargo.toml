@@ -1,0 +1,11 @@
+[package]
+name = "ya6502e-rs"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ya6502e"
+path = "src/bin/main.rs"
+
+[dependencies]
+ya6502 = { path = "src/lib"}

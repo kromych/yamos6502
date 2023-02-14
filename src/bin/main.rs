@@ -2,14 +2,14 @@ use ya6502::Memory;
 
 struct RomRam {
     cells: Vec<u8>,
-    rom: (u16, u16),
+    rom_start: u16,
 }
 
 impl RomRam {
     fn new() -> Self {
         Self {
             cells: vec![0; 64 * 1024],
-            rom: (u16::MAX, 0),
+            rom_start: 0xe000,
         }
     }
 }
@@ -20,7 +20,7 @@ impl Memory for RomRam {
             return Err(ya6502::MemoryError::BadAddress(addr));
         }
 
-        if self.rom.0 >= addr && addr < self.rom.0 + self.rom.1 {
+        if addr >= self.rom_start {
             return Err(ya6502::MemoryError::ReadOnlyAddress(addr));
         }
 

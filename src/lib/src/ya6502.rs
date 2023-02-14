@@ -1,15 +1,16 @@
 //! Behavioral emulator of MOS 6502
 //!
 //! There is no cycle-accurate emulation, support
-//! for undocumented instructions and other side effects
-//! such as writing the old value first for the
-//! read-modify-write instructions.
+//! for undocumented instructions and other microarch
+//! side effects such as writing the old value first
+//! for the read-modify-write instructions.
 
 use core::fmt::Debug;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 
 use crate::insns::Insn;
+use crate::AddressMode;
 use bitflags::bitflags;
 use c2rust_bitfields::BitfieldStruct;
 
@@ -221,18 +222,6 @@ where
         Ok(())
     }
 
-    fn handle_group_00(&mut self, _insn: Insn) -> Result<u16, RunError> {
-        Ok(0)
-    }
-
-    fn handle_group_01(&mut self, _insn: Insn) -> Result<u16, RunError> {
-        Ok(0)
-    }
-
-    fn handle_group_10(&mut self, _insn: Insn) -> Result<u16, RunError> {
-        Ok(0)
-    }
-
     pub fn run(&mut self) -> Result<RunExit, RunError> {
         // Handle events.
         // The real processor can't/won't deaasert these lines.
@@ -259,24 +248,356 @@ where
                 .map_err(RunError::CannotFetchInstruction)?,
         );
         let insn = crate::insns::get_insn_by_opcode(opcode.into());
-        if !insn.is_valid() {
-            return Err(RunError::InvalidInstruction(opcode.into()));
-        }
+        match insn {
+            // Group 0b00. Flags, conditionals, jumps, misc. There are a few
+            // quite complex instructions here.
+            Insn::BCC(addr_mode) => self.bcc(addr_mode),
+            Insn::BCS(addr_mode) => self.bcs(addr_mode),
+            Insn::BEQ(addr_mode) => self.beq(addr_mode),
+            Insn::BIT(addr_mode) => self.bit(addr_mode),
+            Insn::BMI(addr_mode) => self.bmi(addr_mode),
+            Insn::BNE(addr_mode) => self.bne(addr_mode),
+            Insn::BPL(addr_mode) => self.bpl(addr_mode),
+            Insn::BRK => {
+                self.brk()?;
+                return Ok(RunExit::Break);
+            }
+            Insn::BVC(addr_mode) => self.bvc(addr_mode),
+            Insn::BVS(addr_mode) => self.bvs(addr_mode),
+            Insn::CLC => self.clc(),
+            Insn::CLD => self.cld(),
+            Insn::CLI => self.cli(),
+            Insn::CLV => self.clv(),
+            Insn::CPX(addr_mode) => self.cpx(addr_mode),
+            Insn::CPY(addr_mode) => self.cpy(addr_mode),
+            Insn::DEY => self.dey(),
+            Insn::INX => self.inx(),
+            Insn::INY => self.iny(),
+            Insn::JMP(addr_mode) => self.jmp(addr_mode),
+            Insn::JSR(addr_mode) => self.jsr(addr_mode),
+            Insn::LDY(addr_mode) => self.ldy(addr_mode),
+            Insn::PHA => self.pha(),
+            Insn::PHP => self.php(),
+            Insn::PLA => self.pla(),
+            Insn::PLP => self.plp(),
+            Insn::RTI => self.rti(),
+            Insn::RTS => self.rts(),
+            Insn::SEC => self.sec(),
+            Insn::SED => self.sed(),
+            Insn::SEI => self.sei(),
+            Insn::STY(addr_mode) => self.sty(addr_mode),
+            Insn::TAY => self.tay(),
+            Insn::TYA => self.tya(),
+            // Group 0b01. ALU instructions, very regular encoding
+            // to make decoding and execution faster in hardware.
+            Insn::ADC(addr_mode) => self.adc(addr_mode),
+            Insn::AND(addr_mode) => self.and(addr_mode),
+            Insn::CMP(addr_mode) => self.cmp(addr_mode),
+            Insn::EOR(addr_mode) => self.eor(addr_mode),
+            Insn::LDA(addr_mode) => self.lda(addr_mode),
+            Insn::ORA(addr_mode) => self.ora(addr_mode),
+            Insn::SBC(addr_mode) => self.sbc(addr_mode),
+            Insn::STA(addr_mode) => self.sta(addr_mode),
+            // Group 0b10. Bit operation and accumulator operations,
+            // less regular than the ALU group.
+            Insn::ASL(addr_mode) => self.asl(addr_mode),
+            Insn::DEC(addr_mode) => self.dec(addr_mode),
+            Insn::DEX => self.dex(),
+            Insn::INC(addr_mode) => self.inc(addr_mode),
+            Insn::LDX(addr_mode) => self.ldx(addr_mode),
+            Insn::LSR(addr_mode) => self.lsr(addr_mode),
+            Insn::NOP => self.nop(),
+            Insn::ROL(addr_mode) => self.rol(addr_mode),
+            Insn::ROR(addr_mode) => self.ror(addr_mode),
+            Insn::STX(addr_mode) => self.stx(addr_mode),
+            Insn::TAX => self.tax(),
+            Insn::TSX => self.tsx(),
+            Insn::TXA => self.txa(),
+            Insn::TXS => self.txs(),
+            // Group 0b11 contains invalid instructions
+            Insn::JAM => return Err(RunError::InvalidInstruction(opcode.into())),
+        }?;
 
-        let insn_len = match opcode.insn_group() {
-            0b00 => self.handle_group_00(insn)?,
-            0b01 => self.handle_group_01(insn)?,
-            0b10 => self.handle_group_10(insn)?,
-            _ => return Err(RunError::InvalidInstruction(opcode.into())),
-        };
+        Ok(RunExit::InstructionExecuted(insn))
+    }
 
-        // Advance PC
-        self.registers.pc += insn_len;
+    #[inline]
+    fn bcc(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("bcc")
+    }
 
-        if matches!(insn, Insn::BRK) {
-            Ok(RunExit::Break)
-        } else {
-            Ok(RunExit::InstructionExecuted(insn))
-        }
+    #[inline]
+    fn bcs(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("bcs")
+    }
+
+    #[inline]
+    fn beq(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("beq")
+    }
+
+    #[inline]
+    fn bit(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("bit")
+    }
+
+    #[inline]
+    fn bmi(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("bmi")
+    }
+
+    #[inline]
+    fn bne(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("bne")
+    }
+
+    #[inline]
+    fn bpl(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("bpl")
+    }
+
+    #[inline]
+    fn brk(&mut self) -> Result<(), RunError> {
+        todo!("brk")
+    }
+
+    #[inline]
+    fn bvc(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("bvc")
+    }
+
+    #[inline]
+    fn bvs(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("bvs")
+    }
+
+    #[inline]
+    fn clc(&mut self) -> Result<(), RunError> {
+        todo!("clc")
+    }
+
+    #[inline]
+    fn cld(&mut self) -> Result<(), RunError> {
+        todo!("cld")
+    }
+
+    #[inline]
+    fn cli(&mut self) -> Result<(), RunError> {
+        todo!("cli")
+    }
+
+    #[inline]
+    fn clv(&mut self) -> Result<(), RunError> {
+        todo!("clv")
+    }
+
+    #[inline]
+    fn cpx(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("cpx")
+    }
+
+    #[inline]
+    fn cpy(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("cpy")
+    }
+
+    #[inline]
+    fn dey(&mut self) -> Result<(), RunError> {
+        todo!("dey")
+    }
+
+    #[inline]
+    fn inx(&mut self) -> Result<(), RunError> {
+        todo!("inx")
+    }
+
+    #[inline]
+    fn iny(&mut self) -> Result<(), RunError> {
+        todo!("iny")
+    }
+
+    #[inline]
+    fn jmp(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("jmp")
+    }
+
+    #[inline]
+    fn jsr(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("jsr")
+    }
+
+    #[inline]
+    fn ldy(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("ldy")
+    }
+
+    #[inline]
+    fn pha(&mut self) -> Result<(), RunError> {
+        todo!("pha")
+    }
+
+    #[inline]
+    fn php(&mut self) -> Result<(), RunError> {
+        todo!("php")
+    }
+
+    #[inline]
+    fn pla(&mut self) -> Result<(), RunError> {
+        todo!("pla")
+    }
+
+    #[inline]
+    fn plp(&mut self) -> Result<(), RunError> {
+        todo!("plp")
+    }
+
+    #[inline]
+    fn rti(&mut self) -> Result<(), RunError> {
+        todo!("rti")
+    }
+
+    #[inline]
+    fn rts(&mut self) -> Result<(), RunError> {
+        todo!("rts")
+    }
+
+    #[inline]
+    fn sec(&mut self) -> Result<(), RunError> {
+        todo!("sec")
+    }
+
+    #[inline]
+    fn sed(&mut self) -> Result<(), RunError> {
+        todo!("sed")
+    }
+
+    #[inline]
+    fn sei(&mut self) -> Result<(), RunError> {
+        todo!("sei")
+    }
+
+    #[inline]
+    fn sty(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("sty")
+    }
+
+    #[inline]
+    fn tay(&mut self) -> Result<(), RunError> {
+        todo!("tay")
+    }
+
+    #[inline]
+    fn tya(&mut self) -> Result<(), RunError> {
+        todo!("tya")
+    }
+
+    #[inline]
+    fn adc(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("adc")
+    }
+
+    #[inline]
+    fn and(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("and")
+    }
+
+    #[inline]
+    fn cmp(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("cmp")
+    }
+
+    #[inline]
+    fn eor(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("eor")
+    }
+
+    #[inline]
+    fn lda(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("lda")
+    }
+
+    #[inline]
+    fn ora(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("ora")
+    }
+
+    #[inline]
+    fn sbc(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("sbc")
+    }
+
+    #[inline]
+    fn sta(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("sta")
+    }
+
+    #[inline]
+    fn asl(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("asl")
+    }
+
+    #[inline]
+    fn dec(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("dec")
+    }
+
+    #[inline]
+    fn dex(&mut self) -> Result<(), RunError> {
+        todo!("dex")
+    }
+
+    #[inline]
+    fn inc(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("inc")
+    }
+
+    #[inline]
+    fn ldx(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("ldx")
+    }
+
+    #[inline]
+    fn lsr(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("lsr")
+    }
+
+    #[inline]
+    fn nop(&mut self) -> Result<(), RunError> {
+        todo!("nop")
+    }
+
+    #[inline]
+    fn rol(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("rol")
+    }
+
+    #[inline]
+    fn ror(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("ror")
+    }
+
+    #[inline]
+    fn stx(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
+        todo!("stx")
+    }
+
+    #[inline]
+    fn tax(&mut self) -> Result<(), RunError> {
+        todo!("tax")
+    }
+
+    #[inline]
+    fn tsx(&mut self) -> Result<(), RunError> {
+        todo!("tsx")
+    }
+
+    #[inline]
+    fn txa(&mut self) -> Result<(), RunError> {
+        todo!("txa")
+    }
+
+    #[inline]
+    fn txs(&mut self) -> Result<(), RunError> {
+        todo!("txs")
     }
 }

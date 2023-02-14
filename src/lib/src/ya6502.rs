@@ -1,4 +1,9 @@
 //! Behavioral emulator of MOS 6502
+//!
+//! There is no cycle-accurate emulation, support
+//! for undocumented instructions and other side effects
+//! such as writing the old value first for the
+//! read-modify-write instructions.
 
 use core::fmt::Debug;
 use core::sync::atomic::AtomicBool;
@@ -121,7 +126,7 @@ impl Mos6502RegisterState {
         self.p.set(Status::BCD, false);
 
         // Stack pointer is not set! In some configurations that might
-        // not even useful, e.g. if the only type of memory is ROM.
+        // not even be useful, e.g. if the only type of memory is ROM.
         // The software is expected to initialize the stack pointer to
         // use interrupts and subroutine calls.
     }

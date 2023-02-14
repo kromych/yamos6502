@@ -12,27 +12,6 @@ use core::sync::atomic::Ordering;
 use crate::insns::Insn;
 use crate::AddressMode;
 use bitflags::bitflags;
-use c2rust_bitfields::BitfieldStruct;
-
-#[derive(Copy, Clone, BitfieldStruct, PartialEq, Eq)]
-pub struct Opcode {
-    #[bitfield(name = "op", ty = "u8", bits = "0..=2")]
-    #[bitfield(name = "addr_mode", ty = "u8", bits = "3..=5")]
-    #[bitfield(name = "insn_group", ty = "u8", bits = "6..=7")]
-    opcode: [u8; 1],
-}
-
-impl From<Opcode> for u8 {
-    fn from(value: Opcode) -> Self {
-        value.opcode[0]
-    }
-}
-
-impl From<u8> for Opcode {
-    fn from(value: u8) -> Self {
-        Opcode { opcode: [value] }
-    }
-}
 
 /// Memory errors
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -242,12 +221,11 @@ where
         }
 
         // Fetch instruction
-        let opcode = Opcode::from(
-            self.memory
-                .read(self.registers.pc)
-                .map_err(RunError::CannotFetchInstruction)?,
-        );
-        let insn = crate::insns::get_insn_by_opcode(opcode.into());
+        let opcode = self
+            .memory
+            .read(self.registers.pc)
+            .map_err(RunError::CannotFetchInstruction)?;
+        let insn = crate::insns::get_insn_by_opcode(opcode);
         match insn {
             // Group 0b00. Flags, conditionals, jumps, misc. There are a few
             // quite complex instructions here.
@@ -315,7 +293,7 @@ where
             Insn::TXA => self.txa(),
             Insn::TXS => self.txs(),
             // Group 0b11 contains invalid instructions
-            Insn::JAM => return Err(RunError::InvalidInstruction(opcode.into())),
+            Insn::JAM => return Err(RunError::InvalidInstruction(opcode)),
         }?;
 
         Ok(RunExit::InstructionExecuted(insn))

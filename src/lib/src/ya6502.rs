@@ -69,7 +69,7 @@ pub const NMI_VECTOR: [u16; 2] = [0xFFFA, 0xFFFB];
 
 /// MOS 6502 register state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Mos6502RegisterState {
+pub struct Mos6502RegisterFile {
     /// Program counter, little-endian
     pub pc: u16,
     /// Stack pointer. The stack grows top-down
@@ -84,7 +84,7 @@ pub struct Mos6502RegisterState {
     pub p: Status,
 }
 
-impl Mos6502RegisterState {
+impl Mos6502RegisterFile {
     /// Some arbitrary values giving an
     /// incosistent state to catch bugs
     pub fn new() -> Self {
@@ -112,9 +112,9 @@ impl Mos6502RegisterState {
     }
 }
 
-impl Default for Mos6502RegisterState {
+impl Default for Mos6502RegisterFile {
     fn default() -> Self {
-        Mos6502RegisterState::new()
+        Mos6502RegisterFile::new()
     }
 }
 
@@ -150,11 +150,17 @@ pub struct Mos6502<'memory, M>
 where
     M: Memory,
 {
-    memory: &'memory M,
-    registers: Mos6502RegisterState,
+    mem: &'memory M,
+    regf: Mos6502RegisterFile,
+    // The target might not provide better options than
+    // plain atomic store and loads. Should be a room
+    // for perf optimization.
     reset_pending: AtomicBool,
     irq_pending: AtomicBool,
     nmi_pending: AtomicBool,
+    // Jammed, only reset will help
+    fault: Option<RunError>,
+    last_opcode: u8,
 }
 
 impl<'memory, M> Mos6502<'memory, M>
@@ -163,11 +169,13 @@ where
 {
     pub fn new(memory: &'memory M) -> Self {
         Self {
-            memory,
-            registers: Mos6502RegisterState::default(),
+            mem: memory,
+            regf: Mos6502RegisterFile::default(),
             reset_pending: AtomicBool::new(false),
             nmi_pending: AtomicBool::new(false),
             irq_pending: AtomicBool::new(false),
+            fault: None,
+            last_opcode: 0,
         }
     }
 
@@ -183,49 +191,123 @@ where
         self.nmi_pending.store(true, Ordering::Release);
     }
 
-    pub fn registers(&self) -> &Mos6502RegisterState {
-        &self.registers
+    pub fn registers(&self) -> &Mos6502RegisterFile {
+        &self.regf
+    }
+
+    fn get_u8_at(&self, addr: u16) -> Result<u8, RunError> {
+        self.mem.read(addr).map_err(RunError::MemoryAccess)
+    }
+
+    fn get_u16_at(&self, addr: u16) -> Result<u16, RunError> {
+        let lo = self.mem.read(addr).map_err(RunError::MemoryAccess)?;
+        let hi = self
+            .mem
+            .read(addr.wrapping_add(1))
+            .map_err(RunError::MemoryAccess)?;
+
+        Ok(u16::from_le_bytes([lo, hi]))
+    }
+
+    /// Computes the effective address. Expects the program counter being advanced past
+    /// the instruction opcode, and advances it to skip the addressing mode bytes.
+    fn get_effective_address(&mut self, addr_mode: AddressMode) -> Result<u16, RunError> {
+        match addr_mode {
+            AddressMode::Implicit => Err(RunError::InvalidInstruction(self.last_opcode)),
+            AddressMode::Immediate | AddressMode::Relative => {
+                let ea = self.regf.pc;
+                self.regf.pc = self.regf.pc.wrapping_add(1);
+
+                Ok(ea)
+            }
+            AddressMode::Indirect => {
+                let ptr = self.get_u16_at(self.regf.pc)?;
+                self.regf.pc = self.regf.pc.wrapping_add(2);
+                let ea = self.get_u16_at(ptr)?;
+
+                Ok(ea)
+            }
+            AddressMode::Xindirect => {
+                let ptr = self
+                    .get_u8_at(self.regf.pc)?
+                    .wrapping_add(self.regf.x)
+                    .into();
+                self.regf.pc = self.regf.pc.wrapping_add(1);
+                let ea = self.get_u16_at(ptr)?;
+
+                Ok(ea)
+            }
+            AddressMode::IndirectY => {
+                let ptr = self.get_u8_at(self.regf.pc)?.into();
+                self.regf.pc = self.regf.pc.wrapping_add(1);
+                let ea = self.get_u16_at(ptr)?.wrapping_add(self.regf.y.into());
+
+                Ok(ea)
+            }
+            AddressMode::Absolute => {
+                let ea = self.get_u16_at(self.regf.pc)?;
+                self.regf.pc = self.regf.pc.wrapping_add(2);
+
+                Ok(ea)
+            }
+            AddressMode::AbsoluteX => {
+                let ea = self
+                    .get_u16_at(self.regf.pc)?
+                    .wrapping_add(self.regf.x.into());
+                self.regf.pc = self.regf.pc.wrapping_add(2);
+
+                Ok(ea)
+            }
+            AddressMode::AbsoluteY => {
+                let ea = self
+                    .get_u16_at(self.regf.pc)?
+                    .wrapping_add(self.regf.y.into());
+                self.regf.pc = self.regf.pc.wrapping_add(2);
+
+                Ok(ea)
+            }
+            AddressMode::Zeropage => {
+                let ea = self.get_u8_at(self.regf.pc)?.into();
+                self.regf.pc = self.regf.pc.wrapping_add(1);
+
+                Ok(ea)
+            }
+            AddressMode::ZeropageX => {
+                let ea = self
+                    .get_u8_at(self.regf.pc)?
+                    .wrapping_add(self.regf.x)
+                    .into();
+                self.regf.pc = self.regf.pc.wrapping_add(1);
+
+                Ok(ea)
+            }
+            AddressMode::ZeropageY => {
+                let ea = self
+                    .get_u8_at(self.regf.pc)?
+                    .wrapping_add(self.regf.y)
+                    .into();
+                self.regf.pc = self.regf.pc.wrapping_add(1);
+
+                Ok(ea)
+            }
+        }
     }
 
     fn jump_indirect(&mut self, pc_ptr: [u16; 2]) -> Result<(), RunError> {
-        let lo_pc = self
-            .memory
-            .read(pc_ptr[0])
-            .map_err(RunError::MemoryAccess)?;
-        let hi_pc = self
-            .memory
-            .read(pc_ptr[1])
-            .map_err(RunError::MemoryAccess)?;
-        self.registers.pc = u16::from_le_bytes([lo_pc, hi_pc]);
+        let lo_pc = self.mem.read(pc_ptr[0]).map_err(RunError::MemoryAccess)?;
+        let hi_pc = self.mem.read(pc_ptr[1]).map_err(RunError::MemoryAccess)?;
+        self.regf.pc = u16::from_le_bytes([lo_pc, hi_pc]);
 
         Ok(())
     }
 
-    pub fn run(&mut self) -> Result<RunExit, RunError> {
-        // Handle events.
-        // The real processor can't/won't deaasert these lines.
-        if self.reset_pending.load(Ordering::Acquire) {
-            self.registers.reset();
-            self.jump_indirect(RESET_VECTOR)?;
-            self.reset_pending.store(false, Ordering::Release);
-        }
-        if self.nmi_pending.load(Ordering::Acquire) {
-            self.jump_indirect(NMI_VECTOR)?;
-            self.nmi_pending.store(false, Ordering::Release);
-            return Ok(RunExit::NonMaskableInterrupt);
-        }
-        if !self.registers.p.contains(Status::INT_DIS) && self.irq_pending.load(Ordering::Acquire) {
-            self.jump_indirect(IRQ_VECTOR)?;
-            self.irq_pending.store(false, Ordering::Release);
-            return Ok(RunExit::Interrupt);
-        }
-
+    fn step(&mut self) -> Result<RunExit, RunError> {
         // Fetch instruction
-        let opcode = self
-            .memory
-            .read(self.registers.pc)
+        self.last_opcode = self
+            .mem
+            .read(self.regf.pc)
             .map_err(RunError::CannotFetchInstruction)?;
-        let insn = crate::insns::get_insn_by_opcode(opcode);
+        let insn = crate::insns::get_insn_by_opcode(self.last_opcode);
         match insn {
             // Group 0b00. Flags, conditionals, jumps, misc. There are a few
             // quite complex instructions here.
@@ -293,10 +375,52 @@ where
             Insn::TXA => self.txa(),
             Insn::TXS => self.txs(),
             // Group 0b11 contains invalid instructions
-            Insn::JAM => return Err(RunError::InvalidInstruction(opcode)),
+            Insn::JAM => {
+                return Err(RunError::InvalidInstruction(self.last_opcode));
+            }
         }?;
 
         Ok(RunExit::InstructionExecuted(insn))
+    }
+
+    pub fn run(&mut self) -> Result<RunExit, RunError> {
+        // Handle reset.
+        // The real processor can't/won't deaasert the line.
+        if self.reset_pending.load(Ordering::Acquire) {
+            self.fault = None;
+            self.regf.reset();
+            self.jump_indirect(RESET_VECTOR)?;
+            self.reset_pending.store(false, Ordering::Release);
+        }
+
+        // If the processor faulted, refuse to run.
+        if let Some(f) = self.fault {
+            return Err(f);
+        }
+
+        // Handle other events.
+        // The real processor can't/won't deaasert these lines.
+        if self.nmi_pending.load(Ordering::Acquire) {
+            self.jump_indirect(NMI_VECTOR)?;
+            self.nmi_pending.store(false, Ordering::Release);
+            return Ok(RunExit::NonMaskableInterrupt);
+        }
+        if !self.regf.p.contains(Status::INT_DIS) && self.irq_pending.load(Ordering::Acquire) {
+            self.jump_indirect(IRQ_VECTOR)?;
+            self.irq_pending.store(false, Ordering::Release);
+            return Ok(RunExit::Interrupt);
+        }
+
+        // The register state is rolled back on an instruction fault
+        let registers = self.regf;
+        match self.step() {
+            Err(e) => {
+                self.fault = Some(e);
+                self.regf = registers;
+                Err(e)
+            }
+            Ok(o) => Ok(o),
+        }
     }
 
     #[inline]
@@ -495,8 +619,16 @@ where
     }
 
     #[inline]
-    fn ora(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("ora")
+    fn ora(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
+        self.regf.pc = self.regf.pc.wrapping_add(1);
+
+        let ea = self.get_effective_address(addr_mode)?;
+        let data = self.get_u8_at(ea)?;
+        self.regf.a |= data;
+        self.regf.p.set(Status::ZERO, self.regf.a == 0);
+        self.regf.p.set(Status::NEG, (self.regf.a as i8) < 0);
+
+        Ok(())
     }
 
     #[inline]

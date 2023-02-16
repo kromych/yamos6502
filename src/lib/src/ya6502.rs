@@ -179,6 +179,18 @@ where
         }
     }
 
+    pub fn with_registers(memory: &'memory M, regf: Mos6502RegisterFile) -> Self {
+        Self {
+            mem: memory,
+            regf,
+            reset_pending: AtomicBool::new(false),
+            nmi_pending: AtomicBool::new(false),
+            irq_pending: AtomicBool::new(false),
+            fault: None,
+            last_opcode: 0,
+        }
+    }
+
     pub fn irq(&mut self) {
         self.irq_pending.store(true, Ordering::Release);
     }
@@ -529,8 +541,16 @@ where
     }
 
     #[inline]
-    fn ldy(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("ldy")
+    fn ldy(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
+        self.regf.pc = self.regf.pc.wrapping_add(1);
+
+        let ea = self.get_effective_address(addr_mode)?;
+        let data = self.get_u8_at(ea)?;
+        self.regf.y = data;
+        self.regf.p.set(Status::ZERO, self.regf.y == 0);
+        self.regf.p.set(Status::NEG, (self.regf.y as i8) < 0);
+
+        Ok(())
     }
 
     #[inline]
@@ -614,8 +634,16 @@ where
     }
 
     #[inline]
-    fn lda(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("lda")
+    fn lda(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
+        self.regf.pc = self.regf.pc.wrapping_add(1);
+
+        let ea = self.get_effective_address(addr_mode)?;
+        let data = self.get_u8_at(ea)?;
+        self.regf.a = data;
+        self.regf.p.set(Status::ZERO, self.regf.a == 0);
+        self.regf.p.set(Status::NEG, (self.regf.a as i8) < 0);
+
+        Ok(())
     }
 
     #[inline]
@@ -662,8 +690,16 @@ where
     }
 
     #[inline]
-    fn ldx(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("ldx")
+    fn ldx(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
+        self.regf.pc = self.regf.pc.wrapping_add(1);
+
+        let ea = self.get_effective_address(addr_mode)?;
+        let data = self.get_u8_at(ea)?;
+        self.regf.x = data;
+        self.regf.p.set(Status::ZERO, self.regf.x == 0);
+        self.regf.p.set(Status::NEG, (self.regf.x as i8) < 0);
+
+        Ok(())
     }
 
     #[inline]

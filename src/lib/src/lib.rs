@@ -3,6 +3,7 @@
 #![no_std]
 
 mod insns;
+mod tests;
 mod ya6502;
 
 pub use crate::insns::*;

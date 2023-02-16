@@ -702,7 +702,7 @@ pub fn get_opcode_string(opcode: u8) -> &'static str {
     INSN_STR[opcode as usize]
 }
 
-pub fn get_insn_opcode(insn: &Insn) -> u8 {
+pub fn get_insn_opcode(insn: Insn) -> u8 {
     match insn {
         Insn::ADC(AddressMode::Absolute) => 0x6d,
         Insn::ADC(AddressMode::AbsoluteX) => 0x7d,
@@ -856,26 +856,5 @@ pub fn get_insn_opcode(insn: &Insn) -> u8 {
         Insn::TXS => 0x9a,
         Insn::TYA => 0x98,
         _ => 0xff,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_insn() {
-        for g in 0..3_u8 {
-            for h in 0..8 {
-                for l in 0..8 {
-                    let opcode = (h << 5) | (l << 2) | g;
-                    let insn = get_insn_by_opcode(opcode);
-                    if insn.is_valid() {
-                        let same_opcode = get_insn_opcode(&insn);
-                        assert!(same_opcode == opcode);
-                    }
-                }
-            }
-        }
     }
 }

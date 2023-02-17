@@ -58,10 +58,12 @@ fn test_loads() {
     memory.write_u8(ABSOLUTE_START, 0xab);
     memory.write_u8(ABSOLUTE_START + 0xf3, 0xac);
     memory.write_u8(ABSOLUTE_START + 0xf4, 0xad);
+    memory.write_u8(ABSOLUTE_START + 0xcc, 0xae);
 
     // Some data on the zero page
     memory.write_u8(0x35, 0xba);
     memory.write_u8(0x36, 0xbb);
+    memory.write_u8(0x37, 0xcc);
     memory.write_u8(0x43, 0xbd);
     memory.write_u8(0x44, 0xbe);
 
@@ -70,6 +72,8 @@ fn test_loads() {
     memory.write_u8(0xbbba, 0x77);
     memory.write_u8(0xbebd, 0x74);
     memory.write_u8(0xbfb1, 0x78);
+
+    memory.write_u16(0x000f, 0xbbba);
 
     // Write the program to the memory
     memory.write(
@@ -110,14 +114,26 @@ fn test_loads() {
             0x43,
             get_insn_opcode(Insn::LDA(AddressMode::ZeropageX)),
             0x42,
-            // get_insn_opcode(Insn::LDX(AddressMode::Absolute)),
-            // get_insn_opcode(Insn::LDX(AddressMode::AbsoluteY)),
-            // get_insn_opcode(Insn::LDX(AddressMode::Zeropage)),
-            // get_insn_opcode(Insn::LDX(AddressMode::ZeropageY)),
-            // get_insn_opcode(Insn::LDY(AddressMode::Absolute)),
-            // get_insn_opcode(Insn::LDY(AddressMode::AbsoluteX)),
-            // get_insn_opcode(Insn::LDY(AddressMode::Zeropage)),
-            // get_insn_opcode(Insn::LDY(AddressMode::ZeropageX)),
+            get_insn_opcode(Insn::LDX(AddressMode::Absolute)),
+            ABSOLUTE_START as u8,
+            (ABSOLUTE_START >> 8) as u8,
+            get_insn_opcode(Insn::LDX(AddressMode::AbsoluteY)),
+            ABSOLUTE_START as u8,
+            (ABSOLUTE_START >> 8) as u8,
+            get_insn_opcode(Insn::LDX(AddressMode::Zeropage)),
+            0x43,
+            get_insn_opcode(Insn::LDX(AddressMode::ZeropageY)),
+            0x43,
+            get_insn_opcode(Insn::LDY(AddressMode::Absolute)),
+            ABSOLUTE_START as u8,
+            (ABSOLUTE_START >> 8) as u8,
+            get_insn_opcode(Insn::LDY(AddressMode::AbsoluteX)),
+            ABSOLUTE_START as u8,
+            (ABSOLUTE_START >> 8) as u8,
+            get_insn_opcode(Insn::LDY(AddressMode::Zeropage)),
+            0x43,
+            get_insn_opcode(Insn::LDY(AddressMode::ZeropageX)),
+            0x43,
         ],
     );
 
@@ -235,6 +251,62 @@ fn test_loads() {
     assert!(!mos6502.registers().p.contains(Status::ZERO));
     assert!(mos6502.registers().p.contains(Status::NEG));
     assert!(mos6502.registers().a == 0xba);
+
+    assert!(
+        mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDX(AddressMode::Absolute))
+    );
+    assert!(!mos6502.registers().p.contains(Status::ZERO));
+    assert!(mos6502.registers().p.contains(Status::NEG));
+    assert!(mos6502.registers().x == 0xab);
+
+    assert!(
+        mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDX(AddressMode::AbsoluteY))
+    );
+    assert!(!mos6502.registers().p.contains(Status::ZERO));
+    assert!(mos6502.registers().p.contains(Status::NEG));
+    assert!(mos6502.registers().x == 0xad);
+
+    assert!(
+        mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDX(AddressMode::Zeropage))
+    );
+    assert!(!mos6502.registers().p.contains(Status::ZERO));
+    assert!(mos6502.registers().p.contains(Status::NEG));
+    assert!(mos6502.registers().x == 0xbd);
+
+    assert!(
+        mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDX(AddressMode::ZeropageY))
+    );
+    assert!(!mos6502.registers().p.contains(Status::ZERO));
+    assert!(mos6502.registers().p.contains(Status::NEG));
+    assert!(mos6502.registers().x == 0xcc);
+
+    assert!(
+        mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDY(AddressMode::Absolute))
+    );
+    assert!(!mos6502.registers().p.contains(Status::ZERO));
+    assert!(mos6502.registers().p.contains(Status::NEG));
+    assert!(mos6502.registers().y == 0xab);
+
+    assert!(
+        mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDY(AddressMode::AbsoluteX))
+    );
+    assert!(!mos6502.registers().p.contains(Status::ZERO));
+    assert!(mos6502.registers().p.contains(Status::NEG));
+    assert!(mos6502.registers().y == 0xae);
+
+    assert!(
+        mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDY(AddressMode::Zeropage))
+    );
+    assert!(!mos6502.registers().p.contains(Status::ZERO));
+    assert!(mos6502.registers().p.contains(Status::NEG));
+    assert!(mos6502.registers().y == 0xbd);
+
+    assert!(
+        mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDY(AddressMode::ZeropageX))
+    );
+    assert!(!mos6502.registers().p.contains(Status::ZERO));
+    assert!(mos6502.registers().p.contains(Status::NEG));
+    assert!(mos6502.registers().y == 0xba);
 }
 
 #[test]

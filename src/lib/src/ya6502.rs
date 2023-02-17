@@ -150,7 +150,7 @@ pub struct Mos6502<'memory, M>
 where
     M: Memory,
 {
-    mem: &'memory M,
+    mem: &'memory mut M,
     regf: Mos6502RegisterFile,
     // The target might not provide better options than
     // plain atomic store and loads. Should be a room
@@ -167,7 +167,7 @@ impl<'memory, M> Mos6502<'memory, M>
 where
     M: Memory,
 {
-    pub fn new(memory: &'memory M) -> Self {
+    pub fn new(memory: &'memory mut M) -> Self {
         Self {
             mem: memory,
             regf: Mos6502RegisterFile::default(),
@@ -179,7 +179,7 @@ where
         }
     }
 
-    pub fn with_registers(memory: &'memory M, regf: Mos6502RegisterFile) -> Self {
+    pub fn with_registers(memory: &'memory mut M, regf: Mos6502RegisterFile) -> Self {
         Self {
             mem: memory,
             regf,
@@ -207,8 +207,12 @@ where
         &self.regf
     }
 
-    fn get_u8_at(&self, addr: u16) -> Result<u8, RunError> {
+    fn load_u8(&self, addr: u16) -> Result<u8, RunError> {
         self.mem.read(addr).map_err(RunError::MemoryAccess)
+    }
+
+    fn store_u8(&mut self, addr: u16, value: u8) -> Result<(), RunError> {
+        self.mem.write(addr, value).map_err(RunError::MemoryAccess)
     }
 
     fn get_u16_at(&self, addr: u16) -> Result<u16, RunError> {
@@ -240,17 +244,14 @@ where
                 Ok(ea)
             }
             AddressMode::Xindirect => {
-                let ptr = self
-                    .get_u8_at(self.regf.pc)?
-                    .wrapping_add(self.regf.x)
-                    .into();
+                let ptr = self.load_u8(self.regf.pc)?.wrapping_add(self.regf.x).into();
                 self.regf.pc = self.regf.pc.wrapping_add(1);
                 let ea = self.get_u16_at(ptr)?;
 
                 Ok(ea)
             }
             AddressMode::IndirectY => {
-                let ptr = self.get_u8_at(self.regf.pc)?.into();
+                let ptr = self.load_u8(self.regf.pc)?.into();
                 self.regf.pc = self.regf.pc.wrapping_add(1);
                 let ea = self.get_u16_at(ptr)?.wrapping_add(self.regf.y.into());
 
@@ -279,25 +280,19 @@ where
                 Ok(ea)
             }
             AddressMode::Zeropage => {
-                let ea = self.get_u8_at(self.regf.pc)?.into();
+                let ea = self.load_u8(self.regf.pc)?.into();
                 self.regf.pc = self.regf.pc.wrapping_add(1);
 
                 Ok(ea)
             }
             AddressMode::ZeropageX => {
-                let ea = self
-                    .get_u8_at(self.regf.pc)?
-                    .wrapping_add(self.regf.x)
-                    .into();
+                let ea = self.load_u8(self.regf.pc)?.wrapping_add(self.regf.x).into();
                 self.regf.pc = self.regf.pc.wrapping_add(1);
 
                 Ok(ea)
             }
             AddressMode::ZeropageY => {
-                let ea = self
-                    .get_u8_at(self.regf.pc)?
-                    .wrapping_add(self.regf.y)
-                    .into();
+                let ea = self.load_u8(self.regf.pc)?.wrapping_add(self.regf.y).into();
                 self.regf.pc = self.regf.pc.wrapping_add(1);
 
                 Ok(ea)
@@ -545,7 +540,7 @@ where
         self.regf.pc = self.regf.pc.wrapping_add(1);
 
         let ea = self.get_effective_address(addr_mode)?;
-        let data = self.get_u8_at(ea)?;
+        let data = self.load_u8(ea)?;
         self.regf.y = data;
         self.regf.p.set(Status::ZERO, self.regf.y == 0);
         self.regf.p.set(Status::NEG, (self.regf.y as i8) < 0);
@@ -599,8 +594,13 @@ where
     }
 
     #[inline]
-    fn sty(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("sty")
+    fn sty(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
+        self.regf.pc = self.regf.pc.wrapping_add(1);
+
+        let ea = self.get_effective_address(addr_mode)?;
+        self.store_u8(ea, self.regf.y)?;
+
+        Ok(())
     }
 
     #[inline]
@@ -638,7 +638,7 @@ where
         self.regf.pc = self.regf.pc.wrapping_add(1);
 
         let ea = self.get_effective_address(addr_mode)?;
-        let data = self.get_u8_at(ea)?;
+        let data = self.load_u8(ea)?;
         self.regf.a = data;
         self.regf.p.set(Status::ZERO, self.regf.a == 0);
         self.regf.p.set(Status::NEG, (self.regf.a as i8) < 0);
@@ -651,7 +651,7 @@ where
         self.regf.pc = self.regf.pc.wrapping_add(1);
 
         let ea = self.get_effective_address(addr_mode)?;
-        let data = self.get_u8_at(ea)?;
+        let data = self.load_u8(ea)?;
         self.regf.a |= data;
         self.regf.p.set(Status::ZERO, self.regf.a == 0);
         self.regf.p.set(Status::NEG, (self.regf.a as i8) < 0);
@@ -665,8 +665,13 @@ where
     }
 
     #[inline]
-    fn sta(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("sta")
+    fn sta(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
+        self.regf.pc = self.regf.pc.wrapping_add(1);
+
+        let ea = self.get_effective_address(addr_mode)?;
+        self.store_u8(ea, self.regf.a)?;
+
+        Ok(())
     }
 
     #[inline]
@@ -694,7 +699,7 @@ where
         self.regf.pc = self.regf.pc.wrapping_add(1);
 
         let ea = self.get_effective_address(addr_mode)?;
-        let data = self.get_u8_at(ea)?;
+        let data = self.load_u8(ea)?;
         self.regf.x = data;
         self.regf.p.set(Status::ZERO, self.regf.x == 0);
         self.regf.p.set(Status::NEG, (self.regf.x as i8) < 0);
@@ -723,8 +728,13 @@ where
     }
 
     #[inline]
-    fn stx(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("stx")
+    fn stx(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
+        self.regf.pc = self.regf.pc.wrapping_add(1);
+
+        let ea = self.get_effective_address(addr_mode)?;
+        self.store_u8(ea, self.regf.x)?;
+
+        Ok(())
     }
 
     #[inline]

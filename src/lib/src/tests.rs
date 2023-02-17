@@ -75,69 +75,68 @@ fn test_loads() {
 
     memory.write_u16(0x000f, 0xbbba);
 
-    // Write the program to the memory
-    memory.write(
-        TEST_START,
-        &[
-            get_insn_opcode(Insn::LDA(AddressMode::Immediate)),
-            0x12,
-            get_insn_opcode(Insn::LDA(AddressMode::Immediate)),
-            0x00,
-            get_insn_opcode(Insn::LDA(AddressMode::Immediate)),
-            0xF2,
-            get_insn_opcode(Insn::LDX(AddressMode::Immediate)),
-            0x13,
-            get_insn_opcode(Insn::LDX(AddressMode::Immediate)),
-            0x00,
-            get_insn_opcode(Insn::LDX(AddressMode::Immediate)),
-            0xF3,
-            get_insn_opcode(Insn::LDY(AddressMode::Immediate)),
-            0x14,
-            get_insn_opcode(Insn::LDY(AddressMode::Immediate)),
-            0x00,
-            get_insn_opcode(Insn::LDY(AddressMode::Immediate)),
-            0xF4,
-            get_insn_opcode(Insn::LDA(AddressMode::Absolute)),
-            ABSOLUTE_START as u8,
-            (ABSOLUTE_START >> 8) as u8,
-            get_insn_opcode(Insn::LDA(AddressMode::AbsoluteX)),
-            ABSOLUTE_START as u8,
-            (ABSOLUTE_START >> 8) as u8,
-            get_insn_opcode(Insn::LDA(AddressMode::AbsoluteY)),
-            ABSOLUTE_START as u8,
-            (ABSOLUTE_START >> 8) as u8,
-            get_insn_opcode(Insn::LDA(AddressMode::Xindirect)),
-            0x42,
-            get_insn_opcode(Insn::LDA(AddressMode::IndirectY)),
-            0x43,
-            get_insn_opcode(Insn::LDA(AddressMode::Zeropage)),
-            0x43,
-            get_insn_opcode(Insn::LDA(AddressMode::ZeropageX)),
-            0x42,
-            get_insn_opcode(Insn::LDX(AddressMode::Absolute)),
-            ABSOLUTE_START as u8,
-            (ABSOLUTE_START >> 8) as u8,
-            get_insn_opcode(Insn::LDX(AddressMode::AbsoluteY)),
-            ABSOLUTE_START as u8,
-            (ABSOLUTE_START >> 8) as u8,
-            get_insn_opcode(Insn::LDX(AddressMode::Zeropage)),
-            0x43,
-            get_insn_opcode(Insn::LDX(AddressMode::ZeropageY)),
-            0x43,
-            get_insn_opcode(Insn::LDY(AddressMode::Absolute)),
-            ABSOLUTE_START as u8,
-            (ABSOLUTE_START >> 8) as u8,
-            get_insn_opcode(Insn::LDY(AddressMode::AbsoluteX)),
-            ABSOLUTE_START as u8,
-            (ABSOLUTE_START >> 8) as u8,
-            get_insn_opcode(Insn::LDY(AddressMode::Zeropage)),
-            0x43,
-            get_insn_opcode(Insn::LDY(AddressMode::ZeropageX)),
-            0x43,
-        ],
-    );
+    let program = [
+        get_insn_opcode(Insn::LDA(AddressMode::Immediate)),
+        0x12,
+        get_insn_opcode(Insn::LDA(AddressMode::Immediate)),
+        0x00,
+        get_insn_opcode(Insn::LDA(AddressMode::Immediate)),
+        0xF2,
+        get_insn_opcode(Insn::LDX(AddressMode::Immediate)),
+        0x13,
+        get_insn_opcode(Insn::LDX(AddressMode::Immediate)),
+        0x00,
+        get_insn_opcode(Insn::LDX(AddressMode::Immediate)),
+        0xF3,
+        get_insn_opcode(Insn::LDY(AddressMode::Immediate)),
+        0x14,
+        get_insn_opcode(Insn::LDY(AddressMode::Immediate)),
+        0x00,
+        get_insn_opcode(Insn::LDY(AddressMode::Immediate)),
+        0xF4,
+        get_insn_opcode(Insn::LDA(AddressMode::Absolute)),
+        ABSOLUTE_START as u8,
+        (ABSOLUTE_START >> 8) as u8,
+        get_insn_opcode(Insn::LDA(AddressMode::AbsoluteX)),
+        ABSOLUTE_START as u8,
+        (ABSOLUTE_START >> 8) as u8,
+        get_insn_opcode(Insn::LDA(AddressMode::AbsoluteY)),
+        ABSOLUTE_START as u8,
+        (ABSOLUTE_START >> 8) as u8,
+        get_insn_opcode(Insn::LDA(AddressMode::Xindirect)),
+        0x42,
+        get_insn_opcode(Insn::LDA(AddressMode::IndirectY)),
+        0x43,
+        get_insn_opcode(Insn::LDA(AddressMode::Zeropage)),
+        0x43,
+        get_insn_opcode(Insn::LDA(AddressMode::ZeropageX)),
+        0x42,
+        get_insn_opcode(Insn::LDX(AddressMode::Absolute)),
+        ABSOLUTE_START as u8,
+        (ABSOLUTE_START >> 8) as u8,
+        get_insn_opcode(Insn::LDX(AddressMode::AbsoluteY)),
+        ABSOLUTE_START as u8,
+        (ABSOLUTE_START >> 8) as u8,
+        get_insn_opcode(Insn::LDX(AddressMode::Zeropage)),
+        0x43,
+        get_insn_opcode(Insn::LDX(AddressMode::ZeropageY)),
+        0x43,
+        get_insn_opcode(Insn::LDY(AddressMode::Absolute)),
+        ABSOLUTE_START as u8,
+        (ABSOLUTE_START >> 8) as u8,
+        get_insn_opcode(Insn::LDY(AddressMode::AbsoluteX)),
+        ABSOLUTE_START as u8,
+        (ABSOLUTE_START >> 8) as u8,
+        get_insn_opcode(Insn::LDY(AddressMode::Zeropage)),
+        0x43,
+        get_insn_opcode(Insn::LDY(AddressMode::ZeropageX)),
+        0x43,
+    ];
 
-    let mut mos6502 = Mos6502::new(&memory);
+    // Write the program to the memory
+    memory.write(TEST_START, &program);
+
+    let mut mos6502 = Mos6502::new(&mut memory);
     mos6502.reset();
 
     assert!(
@@ -307,6 +306,65 @@ fn test_loads() {
     assert!(!mos6502.registers().p.contains(Status::ZERO));
     assert!(mos6502.registers().p.contains(Status::NEG));
     assert!(mos6502.registers().y == 0xba);
+}
+
+#[test]
+fn test_stores() {
+    let mut memory = TestMemory::default();
+
+    let program = [
+        get_insn_opcode(Insn::STA(AddressMode::Absolute)),
+        ABSOLUTE_START as u8,
+        (ABSOLUTE_START >> 8) as u8,
+        get_insn_opcode(Insn::STA(AddressMode::AbsoluteX)),
+        ABSOLUTE_START as u8,
+        (ABSOLUTE_START >> 8) as u8,
+        get_insn_opcode(Insn::STA(AddressMode::AbsoluteY)),
+        ABSOLUTE_START as u8,
+        (ABSOLUTE_START >> 8) as u8,
+        // get_insn_opcode(Insn::STA(AddressMode::IndirectY)),
+        // get_insn_opcode(Insn::STA(AddressMode::Xindirect)),
+        // get_insn_opcode(Insn::STA(AddressMode::Zeropage)),
+        // get_insn_opcode(Insn::STA(AddressMode::ZeropageX)),
+        // get_insn_opcode(Insn::STX(AddressMode::Absolute)),
+        // get_insn_opcode(Insn::STX(AddressMode::Zeropage)),
+        // get_insn_opcode(Insn::STX(AddressMode::ZeropageY)),
+        // get_insn_opcode(Insn::STY(AddressMode::Absolute)),
+        // get_insn_opcode(Insn::STY(AddressMode::Zeropage)),
+        // get_insn_opcode(Insn::STY(AddressMode::ZeropageX)),
+    ];
+
+    // Write the program to the memory
+    memory.write(TEST_START, &program);
+
+    {
+        let regf = Mos6502RegisterFile {
+            pc: TEST_START,
+            sp: 0x1,
+            a: 0xaf,
+            x: 0x1b,
+            y: 0x2c,
+            p: Status::empty(),
+        };
+        let mut mos6502 = Mos6502::with_registers(&mut memory, regf);
+
+        assert!(
+            mos6502.run().unwrap()
+                == RunExit::InstructionExecuted(Insn::STA(AddressMode::Absolute))
+        );
+        assert!(
+            mos6502.run().unwrap()
+                == RunExit::InstructionExecuted(Insn::STA(AddressMode::AbsoluteX))
+        );
+        assert!(
+            mos6502.run().unwrap()
+                == RunExit::InstructionExecuted(Insn::STA(AddressMode::AbsoluteY))
+        );
+    }
+
+    assert!(memory.read(ABSOLUTE_START).unwrap() == 0xaf);
+    assert!(memory.read(ABSOLUTE_START + 0x1b).unwrap() == 0xaf);
+    assert!(memory.read(ABSOLUTE_START + 0x2c).unwrap() == 0xaf);
 }
 
 #[test]

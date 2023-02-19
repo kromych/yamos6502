@@ -321,6 +321,19 @@ where
         value
     }
 
+    fn flag_set(&self, flag: Status) -> bool {
+        self.regf.flag_set(flag)
+    }
+
+    fn branch(&mut self, addr_mode: AddressMode, cond: bool) -> Result<(), RunError> {
+        if cond {
+            let ea = self.get_effective_address(addr_mode)?;
+            let offset = self.read_u8(ea)? as i8;
+            self.regf.adjust_pc_by(offset);
+        }
+        Ok(())
+    }
+
     fn step(&mut self) -> Result<RunExit, RunError> {
         // Fetch instruction
         self.last_opcode = self
@@ -336,16 +349,16 @@ where
         match insn {
             // Group 0b00. Flags, conditionals, jumps, misc. There are a few
             // quite complex instructions here.
-            Insn::BCC(_addr_mode) => todo!("bcc"),
-            Insn::BCS(_addr_mode) => todo!("bcs"),
-            Insn::BEQ(_addr_mode) => todo!("beq"),
-            Insn::BIT(_addr_mode) => todo!("bit"),
-            Insn::BMI(_addr_mode) => todo!("bmi"),
-            Insn::BNE(_addr_mode) => todo!("bne"),
-            Insn::BPL(_addr_mode) => todo!("bpl"),
             Insn::BRK => todo!("brk"),
-            Insn::BVC(_addr_mode) => todo!("bvc"),
-            Insn::BVS(_addr_mode) => todo!("bvs"),
+            Insn::BCC(addr_mode) => self.branch(addr_mode, !self.flag_set(Status::Carry))?,
+            Insn::BCS(addr_mode) => self.branch(addr_mode, self.flag_set(Status::Carry))?,
+            Insn::BNE(addr_mode) => self.branch(addr_mode, !self.flag_set(Status::Zero))?,
+            Insn::BEQ(addr_mode) => self.branch(addr_mode, self.flag_set(Status::Zero))?,
+            Insn::BVC(addr_mode) => self.branch(addr_mode, !self.flag_set(Status::Overflow))?,
+            Insn::BVS(addr_mode) => self.branch(addr_mode, self.flag_set(Status::Overflow))?,
+            Insn::BPL(addr_mode) => self.branch(addr_mode, !self.flag_set(Status::Negative))?,
+            Insn::BMI(addr_mode) => self.branch(addr_mode, self.flag_set(Status::Negative))?,
+            Insn::BIT(_addr_mode) => todo!("bit"),
             Insn::CLC => self.regf.clear_flag(Status::Carry),
             Insn::CLD => self.regf.clear_flag(Status::Decimal),
             Insn::CLI => self.regf.clear_flag(Status::InterruptDisable),
@@ -480,8 +493,7 @@ where
             self.nmi_pending.store(false, Ordering::Release);
             return Ok(RunExit::NonMaskableInterrupt);
         }
-        if !self.regf.flag_set(Status::InterruptDisable) && self.irq_pending.load(Ordering::Acquire)
-        {
+        if !self.flag_set(Status::InterruptDisable) && self.irq_pending.load(Ordering::Acquire) {
             self.jump_indirect(IRQ_VECTOR)?;
             self.irq_pending.store(false, Ordering::Release);
             return Ok(RunExit::Interrupt);

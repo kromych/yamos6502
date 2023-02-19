@@ -142,8 +142,8 @@ impl RegisterFile {
     }
 
     #[inline]
-    pub fn adjust_pc_by(&mut self, a: i8) {
-        self.pc = self.pc.wrapping_add((a as u8).into());
+    pub fn adjust_pc_by(&mut self, offset: i8) {
+        self.pc = self.pc.wrapping_add((offset as u8).into());
     }
 
     #[inline]

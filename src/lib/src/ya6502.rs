@@ -80,7 +80,7 @@ where
     M: Memory,
 {
     mem: &'memory mut M,
-    regf: RegisterFile,
+    reg_file: RegisterFile,
     // The target might not provide better options than
     // plain atomic store and loads. Should be a room
     // for perf optimization.
@@ -99,7 +99,7 @@ where
     pub fn new(memory: &'memory mut M) -> Self {
         Self {
             mem: memory,
-            regf: RegisterFile::default(),
+            reg_file: RegisterFile::default(),
             reset_pending: AtomicBool::new(false),
             nmi_pending: AtomicBool::new(false),
             irq_pending: AtomicBool::new(false),
@@ -111,7 +111,7 @@ where
     pub fn with_registers(memory: &'memory mut M, regf: RegisterFile) -> Self {
         Self {
             mem: memory,
-            regf,
+            reg_file: regf,
             reset_pending: AtomicBool::new(false),
             nmi_pending: AtomicBool::new(false),
             irq_pending: AtomicBool::new(false),
@@ -133,7 +133,7 @@ where
     }
 
     pub fn registers(&self) -> &RegisterFile {
-        &self.regf
+        &self.reg_file
     }
 
     fn read_u8(&self, addr: u16) -> Result<u8, RunError> {
@@ -159,94 +159,88 @@ where
     fn get_effective_address(&mut self, addr_mode: AddressMode) -> Result<u16, RunError> {
         match addr_mode {
             AddressMode::Immediate | AddressMode::Relative => {
-                let ea = self.regf.pc();
-                self.regf.adjust_pc_by(1);
+                let ea = self.reg_file.pc();
+                self.reg_file.adjust_pc_by(1);
 
                 Ok(ea)
             }
             AddressMode::Indirect => {
-                let ptr = self.load_u16(self.regf.pc())?;
-                self.regf.adjust_pc_by(2);
+                let ptr = self.load_u16(self.reg_file.pc())?;
+                self.reg_file.adjust_pc_by(2);
                 let ea = self.load_u16(ptr)?;
 
                 Ok(ea)
             }
             AddressMode::Xindirect => {
                 let ptr = self
-                    .read_u8(self.regf.pc())?
-                    .wrapping_add(self.regf.x())
+                    .read_u8(self.reg_file.pc())?
+                    .wrapping_add(self.reg_file.x())
                     .into();
-                self.regf.adjust_pc_by(1);
+                self.reg_file.adjust_pc_by(1);
                 let ea = self.load_u16(ptr)?;
 
                 Ok(ea)
             }
             AddressMode::IndirectY => {
-                let ptr = self.read_u8(self.regf.pc())?.into();
-                self.regf.adjust_pc_by(1);
-                let ea = self.load_u16(ptr)?.wrapping_add(self.regf.y().into());
+                let ptr = self.read_u8(self.reg_file.pc())?.into();
+                self.reg_file.adjust_pc_by(1);
+                let ea = self.load_u16(ptr)?.wrapping_add(self.reg_file.y().into());
 
                 Ok(ea)
             }
             AddressMode::Absolute => {
-                let ea = self.load_u16(self.regf.pc())?;
-                self.regf.adjust_pc_by(2);
+                let ea = self.load_u16(self.reg_file.pc())?;
+                self.reg_file.adjust_pc_by(2);
 
                 Ok(ea)
             }
             AddressMode::AbsoluteX => {
                 let ea = self
-                    .load_u16(self.regf.pc())?
-                    .wrapping_add(self.regf.x().into());
-                self.regf.adjust_pc_by(2);
+                    .load_u16(self.reg_file.pc())?
+                    .wrapping_add(self.reg_file.x().into());
+                self.reg_file.adjust_pc_by(2);
 
                 Ok(ea)
             }
             AddressMode::AbsoluteY => {
                 let ea = self
-                    .load_u16(self.regf.pc())?
-                    .wrapping_add(self.regf.y().into());
-                self.regf.adjust_pc_by(2);
+                    .load_u16(self.reg_file.pc())?
+                    .wrapping_add(self.reg_file.y().into());
+                self.reg_file.adjust_pc_by(2);
 
                 Ok(ea)
             }
             AddressMode::Zeropage => {
-                let ea = self.read_u8(self.regf.pc())?.into();
-                self.regf.adjust_pc_by(1);
+                let ea = self.read_u8(self.reg_file.pc())?.into();
+                self.reg_file.adjust_pc_by(1);
 
                 Ok(ea)
             }
             AddressMode::ZeropageX => {
                 let ea = self
-                    .read_u8(self.regf.pc())?
-                    .wrapping_add(self.regf.x())
+                    .read_u8(self.reg_file.pc())?
+                    .wrapping_add(self.reg_file.x())
                     .into();
-                self.regf.adjust_pc_by(1);
+                self.reg_file.adjust_pc_by(1);
 
                 Ok(ea)
             }
             AddressMode::ZeropageY => {
                 let ea = self
-                    .read_u8(self.regf.pc())?
-                    .wrapping_add(self.regf.y())
+                    .read_u8(self.reg_file.pc())?
+                    .wrapping_add(self.reg_file.y())
                     .into();
-                self.regf.adjust_pc_by(1);
+                self.reg_file.adjust_pc_by(1);
 
                 Ok(ea)
             }
         }
     }
 
-    fn jump_indirect(&mut self, pc_ptr: u16) -> Result<(), RunError> {
-        self.regf.set_pc(self.load_u16(pc_ptr)?);
-
-        Ok(())
-    }
-
     #[inline]
     fn update_flags_nz(&mut self, data: u8) {
-        self.regf.set_flag_from_cond(Status::Zero, data == 0);
-        self.regf
+        self.reg_file.set_flag_from_cond(Status::Zero, data == 0);
+        self.reg_file
             .set_flag_from_cond(Status::Negative, (data as i8) < 0);
     }
 
@@ -263,7 +257,7 @@ where
         let ea = self.get_effective_address(addr_mode)?;
         let value = self.read_u8(ea)?;
         let value = modify(value);
-        *self.regf.reg_mut(reg) = value;
+        *self.reg_file.reg_mut(reg) = value;
         self.update_flags_nz(value);
 
         Ok(value)
@@ -277,7 +271,7 @@ where
     #[inline]
     fn reg_to_mem(&mut self, reg: Register, addr_mode: AddressMode) -> Result<u8, RunError> {
         let ea = self.get_effective_address(addr_mode)?;
-        let value = self.regf.reg(reg);
+        let value = self.reg_file.reg(reg);
         self.write_u8(ea, value)?;
 
         Ok(value)
@@ -285,8 +279,8 @@ where
 
     #[inline]
     fn reg_to_reg(&mut self, reg_src: Register, reg_dst: Register) -> u8 {
-        *self.regf.reg_mut(reg_dst) = self.regf.reg(reg_src);
-        let value = self.regf.reg(reg_dst);
+        *self.reg_file.reg_mut(reg_dst) = self.reg_file.reg(reg_src);
+        let value = self.reg_file.reg(reg_dst);
         self.update_flags_nz(value);
 
         value
@@ -313,23 +307,23 @@ where
     where
         F: Fn(u8) -> u8,
     {
-        let value = self.regf.reg(reg);
+        let value = self.reg_file.reg(reg);
         let value = modify(value);
-        *self.regf.reg_mut(reg) = value;
+        *self.reg_file.reg_mut(reg) = value;
         self.update_flags_nz(value);
 
         value
     }
 
     fn flag_set(&self, flag: Status) -> bool {
-        self.regf.flag_set(flag)
+        self.reg_file.flag_set(flag)
     }
 
     fn branch(&mut self, addr_mode: AddressMode, cond: bool) -> Result<(), RunError> {
         if cond {
             let ea = self.get_effective_address(addr_mode)?;
             let offset = self.read_u8(ea)? as i8;
-            self.regf.adjust_pc_by(offset);
+            self.reg_file.adjust_pc_by(offset);
         }
         Ok(())
     }
@@ -338,9 +332,9 @@ where
         // Fetch instruction
         self.last_opcode = self
             .mem
-            .read(self.regf.pc())
+            .read(self.reg_file.pc())
             .map_err(RunError::CannotFetchInstruction)?;
-        self.regf.adjust_pc_by(1);
+        self.reg_file.adjust_pc_by(1);
 
         // Decode instruction from the opcode
         let insn = crate::insns::decode_insn(self.last_opcode);
@@ -359,10 +353,10 @@ where
             Insn::BPL(addr_mode) => self.branch(addr_mode, !self.flag_set(Status::Negative))?,
             Insn::BMI(addr_mode) => self.branch(addr_mode, self.flag_set(Status::Negative))?,
             Insn::BIT(_addr_mode) => todo!("bit"),
-            Insn::CLC => self.regf.clear_flag(Status::Carry),
-            Insn::CLD => self.regf.clear_flag(Status::Decimal),
-            Insn::CLI => self.regf.clear_flag(Status::InterruptDisable),
-            Insn::CLV => self.regf.clear_flag(Status::Overflow),
+            Insn::CLC => self.reg_file.clear_flag(Status::Carry),
+            Insn::CLD => self.reg_file.clear_flag(Status::Decimal),
+            Insn::CLI => self.reg_file.clear_flag(Status::InterruptDisable),
+            Insn::CLV => self.reg_file.clear_flag(Status::Overflow),
             Insn::CPX(_addr_mode) => todo!("cpx"),
             Insn::CPY(_addr_mode) => todo!("cpy"),
             Insn::DEY => {
@@ -376,7 +370,7 @@ where
             }
             Insn::JMP(addr_mode) => {
                 let pc_ptr = self.get_effective_address(addr_mode)?;
-                self.regf.set_pc(self.load_u16(pc_ptr)?);
+                self.reg_file.set_pc(self.load_u16(pc_ptr)?);
             }
             Insn::JSR(_addr_mode) => todo!("jsr"),
             Insn::LDY(addr_mode) => {
@@ -388,9 +382,9 @@ where
             Insn::PLP => todo!("plp"),
             Insn::RTI => todo!("rti"),
             Insn::RTS => todo!("rts"),
-            Insn::SEC => self.regf.set_flag(Status::Carry),
-            Insn::SED => self.regf.set_flag(Status::Decimal),
-            Insn::SEI => self.regf.set_flag(Status::InterruptDisable),
+            Insn::SEC => self.reg_file.set_flag(Status::Carry),
+            Insn::SED => self.reg_file.set_flag(Status::Decimal),
+            Insn::SEI => self.reg_file.set_flag(Status::InterruptDisable),
             Insn::STY(addr_mode) => {
                 self.reg_to_mem(Register::Y, addr_mode)?;
             }
@@ -405,19 +399,19 @@ where
             // faster in hardware (presumably).
             Insn::ADC(_addr_mode) => todo!("adc"),
             Insn::AND(addr_mode) => {
-                let a = self.regf.a();
+                let a = self.reg_file.a();
                 self.read_modify_to_reg(addr_mode, Register::A, |v| v & a)?;
             }
             Insn::CMP(_addr_mode) => todo!("cmp"),
             Insn::EOR(addr_mode) => {
-                let a = self.regf.a();
+                let a = self.reg_file.a();
                 self.read_modify_to_reg(addr_mode, Register::A, |v| v ^ a)?;
             }
             Insn::LDA(addr_mode) => {
                 self.mem_to_reg(addr_mode, Register::A)?;
             }
             Insn::ORA(addr_mode) => {
-                let a = self.regf.a();
+                let a = self.reg_file.a();
                 self.read_modify_to_reg(addr_mode, Register::A, |v| v | a)?;
             }
             Insn::SBC(_addr_mode) => todo!("sbc"),
@@ -475,9 +469,9 @@ where
         // Handle reset.
         // The real processor can't/won't deaasert the line.
         if self.reset_pending.load(Ordering::Acquire) {
+            self.reg_file.set_pc(self.load_u16(RESET_VECTOR)?);
             self.fault = None;
-            self.regf.reset();
-            self.jump_indirect(RESET_VECTOR)?;
+            self.reg_file.reset();
             self.reset_pending.store(false, Ordering::Release);
         }
 
@@ -489,22 +483,24 @@ where
         // Handle other events.
         // The real processor can't/won't deaasert these lines.
         if self.nmi_pending.load(Ordering::Acquire) {
-            self.jump_indirect(NMI_VECTOR)?;
+            self.reg_file.set_pc(self.load_u16(NMI_VECTOR)?);
             self.nmi_pending.store(false, Ordering::Release);
+
             return Ok(RunExit::NonMaskableInterrupt);
         }
         if !self.flag_set(Status::InterruptDisable) && self.irq_pending.load(Ordering::Acquire) {
-            self.jump_indirect(IRQ_VECTOR)?;
+            self.reg_file.set_pc(self.load_u16(IRQ_VECTOR)?);
             self.irq_pending.store(false, Ordering::Release);
+
             return Ok(RunExit::Interrupt);
         }
 
         // The register state is rolled back on an instruction fault
-        let registers = self.regf;
+        let registers = self.reg_file;
         match self.step() {
             Err(e) => {
                 self.fault = Some(e);
-                self.regf = registers;
+                self.reg_file = registers;
                 Err(e)
             }
             Ok(o) => Ok(o),

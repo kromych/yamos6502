@@ -49,6 +49,9 @@ pub const RESET_VECTOR: u16 = 0xFFFC;
 /// are loaded from these addresses.
 pub const NMI_VECTOR: u16 = 0xFFFA;
 
+/// Bottom of the stack
+pub const STACK_BOTTOM: u16 = 0x0100;
+
 /// Run normal exit
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunExit {
@@ -69,6 +72,8 @@ pub enum RunError {
     CannotFetchInstruction(MemoryError),
     /// Stack overflow
     StackOverflow,
+    /// Stack underflow
+    StackUnderflow,
     /// Error occured when accessing the memory
     MemoryAccess(MemoryError),
 }
@@ -144,7 +149,7 @@ where
         self.mem.write(addr, value).map_err(RunError::MemoryAccess)
     }
 
-    fn load_u16(&self, addr: u16) -> Result<u16, RunError> {
+    fn read_u16(&self, addr: u16) -> Result<u16, RunError> {
         let lo = self.mem.read(addr).map_err(RunError::MemoryAccess)?;
         let hi = self
             .mem
@@ -152,6 +157,15 @@ where
             .map_err(RunError::MemoryAccess)?;
 
         Ok(u16::from_le_bytes([lo, hi]))
+    }
+
+    fn write_u16(&mut self, addr: u16, value: u16) -> Result<(), RunError> {
+        self.mem
+            .write(addr, value as u8)
+            .map_err(RunError::MemoryAccess)?;
+        self.mem
+            .write(addr.wrapping_add(1), (value >> 8) as u8)
+            .map_err(RunError::MemoryAccess)
     }
 
     /// Computes the effective address. Expects the program counter being advanced past
@@ -165,9 +179,9 @@ where
                 Ok(ea)
             }
             AddressMode::Indirect => {
-                let ptr = self.load_u16(self.reg_file.pc())?;
+                let ptr = self.read_u16(self.reg_file.pc())?;
                 self.reg_file.adjust_pc_by(2);
-                let ea = self.load_u16(ptr)?;
+                let ea = self.read_u16(ptr)?;
 
                 Ok(ea)
             }
@@ -177,26 +191,26 @@ where
                     .wrapping_add(self.reg_file.x())
                     .into();
                 self.reg_file.adjust_pc_by(1);
-                let ea = self.load_u16(ptr)?;
+                let ea = self.read_u16(ptr)?;
 
                 Ok(ea)
             }
             AddressMode::IndirectY => {
                 let ptr = self.read_u8(self.reg_file.pc())?.into();
                 self.reg_file.adjust_pc_by(1);
-                let ea = self.load_u16(ptr)?.wrapping_add(self.reg_file.y().into());
+                let ea = self.read_u16(ptr)?.wrapping_add(self.reg_file.y().into());
 
                 Ok(ea)
             }
             AddressMode::Absolute => {
-                let ea = self.load_u16(self.reg_file.pc())?;
+                let ea = self.read_u16(self.reg_file.pc())?;
                 self.reg_file.adjust_pc_by(2);
 
                 Ok(ea)
             }
             AddressMode::AbsoluteX => {
                 let ea = self
-                    .load_u16(self.reg_file.pc())?
+                    .read_u16(self.reg_file.pc())?
                     .wrapping_add(self.reg_file.x().into());
                 self.reg_file.adjust_pc_by(2);
 
@@ -204,7 +218,7 @@ where
             }
             AddressMode::AbsoluteY => {
                 let ea = self
-                    .load_u16(self.reg_file.pc())?
+                    .read_u16(self.reg_file.pc())?
                     .wrapping_add(self.reg_file.y().into());
                 self.reg_file.adjust_pc_by(2);
 
@@ -286,6 +300,7 @@ where
         value
     }
 
+    #[inline]
     fn read_modify_write_mem<F>(
         &mut self,
         addr_mode: AddressMode,
@@ -303,6 +318,7 @@ where
         Ok(value)
     }
 
+    #[inline]
     fn read_modify_write_reg<F>(&mut self, reg: Register, modify: F) -> u8
     where
         F: Fn(u8) -> u8,
@@ -315,10 +331,60 @@ where
         value
     }
 
+    #[inline]
+    fn stack_push_u8(&mut self, value: u8) -> Result<(), RunError> {
+        let sp = self.reg_file.sp();
+        if sp == 0 {
+            return Err(RunError::StackOverflow);
+        }
+        self.write_u8(STACK_BOTTOM + sp as u16, value)?;
+        *self.reg_file.sp_mut() = sp - 1;
+
+        Ok(())
+    }
+
+    #[inline]
+    fn stack_push_u16(&mut self, value: u16) -> Result<(), RunError> {
+        let sp = self.reg_file.sp();
+        if sp < 2 {
+            return Err(RunError::StackOverflow);
+        }
+        self.write_u16(STACK_BOTTOM + sp as u16, value)?;
+        *self.reg_file.sp_mut() = sp - 2;
+
+        Ok(())
+    }
+
+    #[inline]
+    fn stack_pull_u8(&mut self) -> Result<u8, RunError> {
+        let sp = self.reg_file.sp();
+        if sp == u8::MAX {
+            return Err(RunError::StackUnderflow);
+        }
+        let value = self.read_u8(STACK_BOTTOM + sp as u16)?;
+        *self.reg_file.sp_mut() = sp + 1;
+
+        Ok(value)
+    }
+
+    #[inline]
+    fn stack_pull_u16(&mut self) -> Result<u16, RunError> {
+        let sp = self.reg_file.sp();
+        if sp > u8::MAX - 2 {
+            return Err(RunError::StackUnderflow);
+        }
+        let value = self.read_u16(STACK_BOTTOM + sp as u16)?;
+        *self.reg_file.sp_mut() = sp + 2;
+
+        Ok(value)
+    }
+
+    #[inline]
     fn flag_set(&self, flag: Status) -> bool {
         self.reg_file.flag_set(flag)
     }
 
+    #[inline]
     fn branch(&mut self, addr_mode: AddressMode, cond: bool) -> Result<(), RunError> {
         if cond {
             let ea = self.get_effective_address(addr_mode)?;
@@ -370,7 +436,7 @@ where
             }
             Insn::JMP(addr_mode) => {
                 let pc_ptr = self.get_effective_address(addr_mode)?;
-                self.reg_file.set_pc(self.load_u16(pc_ptr)?);
+                self.reg_file.set_pc(self.read_u16(pc_ptr)?);
             }
             Insn::JSR(_addr_mode) => todo!("jsr"),
             Insn::LDY(addr_mode) => {
@@ -469,7 +535,7 @@ where
         // Handle reset.
         // The real processor can't/won't deaasert the line.
         if self.reset_pending.load(Ordering::Acquire) {
-            self.reg_file.set_pc(self.load_u16(RESET_VECTOR)?);
+            self.reg_file.set_pc(self.read_u16(RESET_VECTOR)?);
             self.fault = None;
             self.reg_file.reset();
             self.reset_pending.store(false, Ordering::Release);
@@ -483,13 +549,13 @@ where
         // Handle other events.
         // The real processor can't/won't deaasert these lines.
         if self.nmi_pending.load(Ordering::Acquire) {
-            self.reg_file.set_pc(self.load_u16(NMI_VECTOR)?);
+            self.reg_file.set_pc(self.read_u16(NMI_VECTOR)?);
             self.nmi_pending.store(false, Ordering::Release);
 
             return Ok(RunExit::NonMaskableInterrupt);
         }
         if !self.flag_set(Status::InterruptDisable) && self.irq_pending.load(Ordering::Acquire) {
-            self.reg_file.set_pc(self.load_u16(IRQ_VECTOR)?);
+            self.reg_file.set_pc(self.read_u16(IRQ_VECTOR)?);
             self.irq_pending.store(false, Ordering::Release);
 
             return Ok(RunExit::Interrupt);

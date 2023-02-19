@@ -160,7 +160,6 @@ where
     /// the instruction opcode, and advances it to skip the addressing mode bytes.
     fn get_effective_address(&mut self, addr_mode: AddressMode) -> Result<u16, RunError> {
         match addr_mode {
-            AddressMode::Implicit => Err(RunError::InvalidInstruction(self.last_opcode)),
             AddressMode::Immediate | AddressMode::Relative => {
                 let ea = self.regf.pc();
                 self.regf.adjust_pc_by(1);
@@ -342,14 +341,18 @@ where
             Insn::STA(addr_mode) => self.reg_to_mem(Register::A, addr_mode)?,
             // Group 0b10. Bit operation and accumulator operations,
             // less regular than the ALU group.
+            Insn::ASLA => todo!("asl a"),
             Insn::ASL(_addr_mode) => todo!("asl"),
             Insn::DEC(_addr_mode) => todo!("dec"),
             Insn::DEX => todo!("dex"),
             Insn::INC(_addr_mode) => todo!("inc"),
             Insn::LDX(addr_mode) => self.mem_to_reg(addr_mode, Register::X)?,
+            Insn::LSRA => todo!("lsr a"),
             Insn::LSR(_addr_mode) => todo!("lsr"),
             Insn::NOP => {}
+            Insn::ROLA => todo!("rol a"),
             Insn::ROL(_addr_mode) => todo!("rol"),
+            Insn::RORA => todo!("ror a"),
             Insn::ROR(_addr_mode) => todo!("ror"),
             Insn::STX(addr_mode) => self.reg_to_mem(Register::X, addr_mode)?,
             Insn::TAX => self.reg_to_reg(Register::A, Register::X),

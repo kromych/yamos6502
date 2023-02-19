@@ -267,7 +267,6 @@ const INSN_STR: [&'static str; 256] = [
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AddressMode {
-    Implicit,
     Immediate,
     Relative,
     Xindirect,
@@ -288,6 +287,7 @@ pub enum AddressMode {
 pub enum Insn {
     ADC(AddressMode),
     AND(AddressMode),
+    ASLA,
     ASL(AddressMode),
     BCC(AddressMode),
     BCS(AddressMode),
@@ -319,6 +319,7 @@ pub enum Insn {
     LDA(AddressMode),
     LDX(AddressMode),
     LDY(AddressMode),
+    LSRA,
     LSR(AddressMode),
     NOP,
     ORA(AddressMode),
@@ -326,7 +327,9 @@ pub enum Insn {
     PHP,
     PLA,
     PLP,
+    ROLA,
     ROL(AddressMode),
+    RORA,
     ROR(AddressMode),
     RTI,
     RTS,
@@ -526,7 +529,7 @@ const INSN_BY_GROUP: [[[Insn; 8]; 8]; 4] = [
         [
             Insn::JAM,
             Insn::ASL(AddressMode::Zeropage),
-            Insn::ASL(AddressMode::Implicit),
+            Insn::ASLA,
             Insn::ASL(AddressMode::Absolute),
             Insn::JAM,
             Insn::ASL(AddressMode::ZeropageX),
@@ -536,7 +539,7 @@ const INSN_BY_GROUP: [[[Insn; 8]; 8]; 4] = [
         [
             Insn::JAM,
             Insn::ROL(AddressMode::Zeropage),
-            Insn::ROL(AddressMode::Implicit),
+            Insn::ROLA,
             Insn::ROL(AddressMode::Absolute),
             Insn::JAM,
             Insn::ROL(AddressMode::ZeropageX),
@@ -546,7 +549,7 @@ const INSN_BY_GROUP: [[[Insn; 8]; 8]; 4] = [
         [
             Insn::JAM,
             Insn::LSR(AddressMode::Zeropage),
-            Insn::LSR(AddressMode::Implicit),
+            Insn::LSRA,
             Insn::LSR(AddressMode::Absolute),
             Insn::JAM,
             Insn::LSR(AddressMode::ZeropageX),
@@ -556,7 +559,7 @@ const INSN_BY_GROUP: [[[Insn; 8]; 8]; 4] = [
         [
             Insn::JAM,
             Insn::ROR(AddressMode::Zeropage),
-            Insn::ROR(AddressMode::Implicit),
+            Insn::RORA,
             Insn::ROR(AddressMode::Absolute),
             Insn::JAM,
             Insn::ROR(AddressMode::ZeropageX),
@@ -722,7 +725,7 @@ pub fn get_insn_opcode(insn: Insn) -> u8 {
         Insn::AND(AddressMode::ZeropageX) => 0x35,
         Insn::ASL(AddressMode::Absolute) => 0x0e,
         Insn::ASL(AddressMode::AbsoluteX) => 0x1e,
-        Insn::ASL(AddressMode::Implicit) => 0x0a,
+        Insn::ASLA => 0x0a,
         Insn::ASL(AddressMode::Zeropage) => 0x06,
         Insn::ASL(AddressMode::ZeropageX) => 0x16,
         Insn::BCC(AddressMode::Relative) => 0x90,
@@ -797,7 +800,7 @@ pub fn get_insn_opcode(insn: Insn) -> u8 {
         Insn::LDY(AddressMode::ZeropageX) => 0xb4, // got a test
         Insn::LSR(AddressMode::Absolute) => 0x4e,
         Insn::LSR(AddressMode::AbsoluteX) => 0x5e,
-        Insn::LSR(AddressMode::Implicit) => 0x4a,
+        Insn::LSRA => 0x4a,
         Insn::LSR(AddressMode::Zeropage) => 0x46,
         Insn::LSR(AddressMode::ZeropageX) => 0x56,
         Insn::NOP => 0xea,
@@ -815,12 +818,12 @@ pub fn get_insn_opcode(insn: Insn) -> u8 {
         Insn::PLP => 0x28,
         Insn::ROL(AddressMode::Absolute) => 0x2e,
         Insn::ROL(AddressMode::AbsoluteX) => 0x3e,
-        Insn::ROL(AddressMode::Implicit) => 0x2a,
+        Insn::ROLA => 0x2a,
         Insn::ROL(AddressMode::Zeropage) => 0x26,
         Insn::ROL(AddressMode::ZeropageX) => 0x36,
         Insn::ROR(AddressMode::Absolute) => 0x6e,
         Insn::ROR(AddressMode::AbsoluteX) => 0x7e,
-        Insn::ROR(AddressMode::Implicit) => 0x6a,
+        Insn::RORA => 0x6a,
         Insn::ROR(AddressMode::Zeropage) => 0x66,
         Insn::ROR(AddressMode::ZeropageX) => 0x76,
         Insn::RTI => 0x40,

@@ -402,7 +402,8 @@ where
         let regv = self.reg_file.reg(reg);
 
         self.update_flags_nz(regv.wrapping_sub(memv));
-        self.reg_file.set_flag_from_cond(Status::Carry, regv < memv);
+        self.reg_file
+            .set_flag_from_cond(Status::Carry, regv >= memv);
 
         Ok(())
     }

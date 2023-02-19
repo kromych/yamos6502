@@ -163,13 +163,13 @@ where
             AddressMode::Implicit => Err(RunError::InvalidInstruction(self.last_opcode)),
             AddressMode::Immediate | AddressMode::Relative => {
                 let ea = self.regf.pc();
-                *self.regf.pc_mut() = self.regf.pc().wrapping_add(1);
+                self.regf.adjust_pc_by(1);
 
                 Ok(ea)
             }
             AddressMode::Indirect => {
                 let ptr = self.load_u16(self.regf.pc())?;
-                *self.regf.pc_mut() = self.regf.pc().wrapping_add(2);
+                self.regf.adjust_pc_by(2);
                 let ea = self.load_u16(ptr)?;
 
                 Ok(ea)
@@ -179,21 +179,21 @@ where
                     .load_u8(self.regf.pc())?
                     .wrapping_add(self.regf.x())
                     .into();
-                *self.regf.pc_mut() = self.regf.pc().wrapping_add(1);
+                self.regf.adjust_pc_by(1);
                 let ea = self.load_u16(ptr)?;
 
                 Ok(ea)
             }
             AddressMode::IndirectY => {
                 let ptr = self.load_u8(self.regf.pc())?.into();
-                *self.regf.pc_mut() = self.regf.pc().wrapping_add(1);
+                self.regf.adjust_pc_by(1);
                 let ea = self.load_u16(ptr)?.wrapping_add(self.regf.y().into());
 
                 Ok(ea)
             }
             AddressMode::Absolute => {
                 let ea = self.load_u16(self.regf.pc())?;
-                *self.regf.pc_mut() = self.regf.pc().wrapping_add(2);
+                self.regf.adjust_pc_by(2);
 
                 Ok(ea)
             }
@@ -201,7 +201,7 @@ where
                 let ea = self
                     .load_u16(self.regf.pc())?
                     .wrapping_add(self.regf.x().into());
-                *self.regf.pc_mut() = self.regf.pc().wrapping_add(2);
+                self.regf.adjust_pc_by(2);
 
                 Ok(ea)
             }
@@ -209,13 +209,13 @@ where
                 let ea = self
                     .load_u16(self.regf.pc())?
                     .wrapping_add(self.regf.y().into());
-                *self.regf.pc_mut() = self.regf.pc().wrapping_add(2);
+                self.regf.adjust_pc_by(2);
 
                 Ok(ea)
             }
             AddressMode::Zeropage => {
                 let ea = self.load_u8(self.regf.pc())?.into();
-                *self.regf.pc_mut() = self.regf.pc().wrapping_add(1);
+                self.regf.adjust_pc_by(1);
 
                 Ok(ea)
             }
@@ -224,7 +224,7 @@ where
                     .load_u8(self.regf.pc())?
                     .wrapping_add(self.regf.x())
                     .into();
-                *self.regf.pc_mut() = self.regf.pc().wrapping_add(1);
+                self.regf.adjust_pc_by(1);
 
                 Ok(ea)
             }
@@ -233,7 +233,7 @@ where
                     .load_u8(self.regf.pc())?
                     .wrapping_add(self.regf.y())
                     .into();
-                *self.regf.pc_mut() = self.regf.pc().wrapping_add(1);
+                self.regf.adjust_pc_by(1);
 
                 Ok(ea)
             }
@@ -241,7 +241,7 @@ where
     }
 
     fn jump_indirect(&mut self, pc_ptr: u16) -> Result<(), RunError> {
-        *self.regf.pc_mut() = self.load_u16(pc_ptr)?;
+        self.regf.set_pc(self.load_u16(pc_ptr)?);
 
         Ok(())
     }
@@ -283,7 +283,7 @@ where
             .mem
             .read(self.regf.pc())
             .map_err(RunError::CannotFetchInstruction)?;
-        *self.regf.pc_mut() = self.regf.pc().wrapping_add(1);
+        self.regf.adjust_pc_by(1);
 
         let insn = crate::insns::get_insn_by_opcode(self.last_opcode);
         match insn {
@@ -313,7 +313,7 @@ where
             Insn::INY => todo!("iny"),
             Insn::JMP(addr_mode) => {
                 let pc_ptr = self.get_effective_address(addr_mode)?;
-                *self.regf.pc_mut() = self.load_u16(pc_ptr)?
+                self.regf.set_pc(self.load_u16(pc_ptr)?);
             }
             Insn::JSR(_addr_mode) => todo!("jsr"),
             Insn::LDY(addr_mode) => self.mem_to_reg(addr_mode, Register::Y)?,

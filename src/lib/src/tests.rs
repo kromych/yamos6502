@@ -342,7 +342,7 @@ fn test_stores() {
         *regf.a_mut() = 0xaf;
         *regf.x_mut() = 0x1b;
         *regf.y_mut() = 0x2c;
-        *regf.pc_mut() = TEST_START;
+        regf.set_pc(TEST_START);
 
         let mut mos6502 = Mos6502::with_registers(&mut memory, regf);
 

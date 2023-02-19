@@ -3,30 +3,35 @@
 //! MOS 6502 has four 8-bit registers and the 16-bit instruction
 //! pointer.
 
-use bitflags::bitflags;
 use core::fmt::Debug;
 
-bitflags! {
-    /// SR Flags (bit 7 to bit 0)
-    pub struct Status : u8 {
-        /// N	Negative
-        const NEGATIVE = 0x80;
-        /// V	Overflow
-        const OVERFLOW = 0x40;
-        /// -   Ignored (in the register, hardwired to the logic `1`)
-        const _IGNORED = 0x20;
-        /// B	Break (is never set in the register,
-        ///            only in the register value pushed on the stack which
-        ///            happens when executing BRK)
-        const BRK = 0x10;
-        /// D	Decimal (use BCD for arithmetics), cleared on reset
-        const DECIMAL = 0x08;
-        /// I	Interrupt (IRQ) disable, set on reset
-        const INTERRUPT_DISABLE = 0x04;
-        /// Z	Zero
-        const ZERO = 0x02;
-        /// C	Carry
-        const CARRY = 0x01;
+/// SR Flags (bit 7 to bit 0)
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Status {
+    /// N	Negative
+    Negative = 7,
+    /// V	Overflow
+    Overflow = 6,
+    /// -   Ignored (in the register, hardwired to the logic `1`)
+    _IgnoredAlwaysOne = 5,
+    /// B	Break (is never set in the register,
+    ///            only in the register value pushed on the stack which
+    ///            happens when executing BRK)
+    Break = 4,
+    /// D	Decimal (use BCD for arithmetics), cleared on reset
+    Decimal = 3,
+    /// I	Interrupt (IRQ) disable, set on reset
+    InterruptDisable = 2,
+    /// Z	Zero
+    Zero = 1,
+    /// C	Carry
+    Carry = 0,
+}
+
+impl Status {
+    pub fn mask(&self) -> u8 {
+        1 << (*self as u8)
     }
 }
 
@@ -66,9 +71,9 @@ impl RegisterFile {
     pub fn reset(&mut self) {
         // Hardware sets few flags, everything else is initialized
         // by software.
-        self.set_flag(Status::INTERRUPT_DISABLE);
-        self.set_flag(Status::_IGNORED);
-        self.clear_flag(Status::DECIMAL);
+        self.set_flag_cond(Status::InterruptDisable, true);
+        self.set_flag_cond(Status::_IgnoredAlwaysOne, true);
+        self.set_flag_cond(Status::Decimal, false);
 
         // Stack pointer is not set! In some configurations that might
         // not even be useful, e.g. if the only type of memory is ROM.
@@ -138,17 +143,23 @@ impl RegisterFile {
 
     #[inline]
     pub fn flag_set(&self, flag: Status) -> bool {
-        (self.reg(Register::P) & flag.bits) != 0
+        (self.reg(Register::P) & flag.mask()) != 0
+    }
+
+    #[inline]
+    pub fn set_flag_cond(&mut self, flag: Status, cond: bool) {
+        let p = self.reg_mut(Register::P);
+        *p = (*p & !flag.mask()) | (cond as u8) << (flag as u8);
     }
 
     #[inline]
     pub fn set_flag(&mut self, flag: Status) {
-        *self.reg_mut(Register::P) |= flag.bits;
+        self.set_flag_cond(flag, true)
     }
 
     #[inline]
     pub fn clear_flag(&mut self, flag: Status) {
-        *self.reg_mut(Register::P) &= !flag.bits;
+        self.set_flag_cond(flag, false)
     }
 }
 
@@ -166,7 +177,7 @@ impl Debug for RegisterFile {
             .field("X", &self.x())
             .field("Y", &self.y())
             .field("SP", &self.sp())
-            .field("P", &Status::from_bits(self.r[Register::P as u8 as usize]))
+            .field("P", &self.reg(Register::P))
             .finish()
     }
 }

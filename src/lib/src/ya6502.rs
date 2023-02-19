@@ -249,16 +249,8 @@ where
     #[inline]
     fn update_flags_on_transfer(&mut self, reg: Register) {
         let data = self.regf.reg(reg);
-        if data == 0 {
-            self.regf.set_flag(Status::ZERO);
-        } else {
-            self.regf.clear_flag(Status::ZERO);
-        }
-        if (data as i8) < 0 {
-            self.regf.set_flag(Status::NEGATIVE);
-        } else {
-            self.regf.clear_flag(Status::NEGATIVE);
-        }
+        self.regf.set_flag_cond(Status::Zero, data == 0);
+        self.regf.set_flag_cond(Status::Negative, (data as i8) < 0);
     }
 
     #[inline]
@@ -310,10 +302,10 @@ where
             }
             Insn::BVC(_addr_mode) => todo!("bvc"),
             Insn::BVS(_addr_mode) => todo!("bvs"),
-            Insn::CLC => self.regf.clear_flag(Status::CARRY),
-            Insn::CLD => self.regf.clear_flag(Status::DECIMAL),
-            Insn::CLI => self.regf.clear_flag(Status::INTERRUPT_DISABLE),
-            Insn::CLV => self.regf.clear_flag(Status::OVERFLOW),
+            Insn::CLC => self.regf.clear_flag(Status::Carry),
+            Insn::CLD => self.regf.clear_flag(Status::Decimal),
+            Insn::CLI => self.regf.clear_flag(Status::InterruptDisable),
+            Insn::CLV => self.regf.clear_flag(Status::Overflow),
             Insn::CPX(_addr_mode) => todo!("cpx"),
             Insn::CPY(_addr_mode) => todo!("cpy"),
             Insn::DEY => todo!("dey"),
@@ -331,9 +323,9 @@ where
             Insn::PLP => todo!("plp"),
             Insn::RTI => todo!("rti"),
             Insn::RTS => todo!("rts"),
-            Insn::SEC => self.regf.set_flag(Status::CARRY),
-            Insn::SED => self.regf.set_flag(Status::DECIMAL),
-            Insn::SEI => self.regf.set_flag(Status::INTERRUPT_DISABLE),
+            Insn::SEC => self.regf.set_flag(Status::Carry),
+            Insn::SED => self.regf.set_flag(Status::Decimal),
+            Insn::SEI => self.regf.set_flag(Status::InterruptDisable),
             Insn::STY(addr_mode) => self.reg_to_mem(Register::Y, addr_mode)?,
             Insn::TAY => self.reg_to_reg(Register::A, Register::Y),
             Insn::TYA => self.reg_to_reg(Register::Y, Register::A),
@@ -395,8 +387,7 @@ where
             self.nmi_pending.store(false, Ordering::Release);
             return Ok(RunExit::NonMaskableInterrupt);
         }
-        if !self.regf.flag_set(Status::INTERRUPT_DISABLE)
-            && self.irq_pending.load(Ordering::Acquire)
+        if !self.regf.flag_set(Status::InterruptDisable) && self.irq_pending.load(Ordering::Acquire)
         {
             self.jump_indirect(IRQ_VECTOR)?;
             self.irq_pending.store(false, Ordering::Release);

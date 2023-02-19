@@ -8,4 +8,3 @@ name = "ya6502"
 path = "src/lib.rs"
 
 [dependencies]
-bitflags = "1.3"

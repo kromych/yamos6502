@@ -142,169 +142,169 @@ fn test_loads() {
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDA(AddressMode::Immediate))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(!mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(!mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().a() == 0x12);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDA(AddressMode::Immediate))
     );
-    assert!(mos6502.registers().flag_set(Status::ZERO));
-    assert!(!mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(mos6502.registers().flag_set(Status::Zero));
+    assert!(!mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().a() == 0);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDA(AddressMode::Immediate))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().a() == 0xf2);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDX(AddressMode::Immediate))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(!mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(!mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().x() == 0x13);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDX(AddressMode::Immediate))
     );
-    assert!(mos6502.registers().flag_set(Status::ZERO));
-    assert!(!mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(mos6502.registers().flag_set(Status::Zero));
+    assert!(!mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().x() == 0);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDX(AddressMode::Immediate))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().x() == 0xf3);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDY(AddressMode::Immediate))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(!mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(!mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().y() == 0x14);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDY(AddressMode::Immediate))
     );
-    assert!(mos6502.registers().flag_set(Status::ZERO));
-    assert!(!mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(mos6502.registers().flag_set(Status::Zero));
+    assert!(!mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().y() == 0);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDY(AddressMode::Immediate))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().y() == 0xf4);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDA(AddressMode::Absolute))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().a() == 0xab);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDA(AddressMode::AbsoluteX))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().a() == 0xac);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDA(AddressMode::AbsoluteY))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().a() == 0xad);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDA(AddressMode::Xindirect))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(!mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(!mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().a() == 0x77);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDA(AddressMode::IndirectY))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(!mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(!mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().a() == 0x78);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDA(AddressMode::Zeropage))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().a() == 0xbd);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDA(AddressMode::ZeropageX))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().a() == 0xba);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDX(AddressMode::Absolute))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().x() == 0xab);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDX(AddressMode::AbsoluteY))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().x() == 0xad);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDX(AddressMode::Zeropage))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().x() == 0xbd);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDX(AddressMode::ZeropageY))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().x() == 0xcc);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDY(AddressMode::Absolute))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().y() == 0xab);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDY(AddressMode::AbsoluteX))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().y() == 0xae);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDY(AddressMode::Zeropage))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().y() == 0xbd);
 
     assert!(
         mos6502.run().unwrap() == RunExit::InstructionExecuted(Insn::LDY(AddressMode::ZeropageX))
     );
-    assert!(!mos6502.registers().flag_set(Status::ZERO));
-    assert!(mos6502.registers().flag_set(Status::NEGATIVE));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
     assert!(mos6502.registers().y() == 0xba);
 }
 

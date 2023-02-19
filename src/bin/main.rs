@@ -38,11 +38,12 @@ impl Memory for RomRam {
 }
 
 fn main() {
-    let memory = RomRam::new();
-    let mut mos6502 = ya6502::Mos6502::new(&memory);
+    let mut memory = RomRam::new();
+    let mut mos6502 = ya6502::Mos6502::new(&mut memory);
     mos6502.irq(); // Should be ignored
     mos6502.reset();
 
+    println!("{:#x?}", mos6502.registers());
     let exit = mos6502.run().unwrap();
     println!("{:#x?}", mos6502.registers());
     println!("{:#x?}", exit);

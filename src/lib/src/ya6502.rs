@@ -4,6 +4,10 @@
 //! for undocumented instructions and other microarch
 //! side effects such as writing the old value first
 //! for the read-modify-write instructions.
+//!
+//! Unsuported instructions result in the execution jam,
+//! and the processor rolls its state back to the previous
+//! instruction.
 
 use core::fmt::Debug;
 use core::sync::atomic::AtomicBool;
@@ -11,7 +15,9 @@ use core::sync::atomic::Ordering;
 
 use crate::insns::Insn;
 use crate::AddressMode;
-use bitflags::bitflags;
+use crate::Register;
+use crate::RegisterFile;
+use crate::Status;
 
 /// Memory errors
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,95 +34,20 @@ pub trait Memory {
     fn read(&self, addr: u16) -> Result<u8, MemoryError>;
 }
 
-bitflags! {
-    /// SR Flags (bit 7 to bit 0)
-    pub struct Status : u8 {
-        /// N	Negative
-        const NEG = 0x80;
-        /// V	Overflow
-        const OVF = 0x40;
-        /// -   Ignored (in the register, hardwired to the logic `1`)
-        const _IGNORED = 0x20;
-        /// B	Break (is never set in the register,
-        ///            only in the register value pushed on the stack which
-        ///            happens when executing BRK)
-        const BRK = 0x10;
-        /// D	Decimal (use BCD for arithmetics), cleared on reset
-        const BCD = 0x08;
-        /// I	Interrupt (IRQ) disable, set on reset
-        const INT_DIS = 0x04;
-        /// Z	Zero
-        const ZERO = 0x02;
-        /// C	Carry
-        const CARRY = 0x01;
-    }
-}
-
 /// When an interrupt is signaled, the low and the high
 /// 8 bits of the program counter are loaded
 /// from these addresses.
-pub const IRQ_VECTOR: [u16; 2] = [0xFFFE, 0xFFFF];
+pub const IRQ_VECTOR: u16 = 0xFFFE;
 
 /// When a reset is requested, the low and the high
 /// 8 bits of the program counter are loaded
 /// from these addresses.
-pub const RESET_VECTOR: [u16; 2] = [0xFFFC, 0xFFFD];
+pub const RESET_VECTOR: u16 = 0xFFFC;
 
 /// When an non-maskable interrupt is signaled,
 /// the low and the high 8 bits of the program counter
 /// are loaded from these addresses.
-pub const NMI_VECTOR: [u16; 2] = [0xFFFA, 0xFFFB];
-
-/// MOS 6502 register state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Mos6502RegisterFile {
-    /// Program counter, little-endian
-    pub pc: u16,
-    /// Stack pointer. The stack grows top-down
-    pub sp: u8,
-    /// Accumulator
-    pub a: u8,
-    /// X index register
-    pub x: u8,
-    /// Y index register
-    pub y: u8,
-    /// Status register [NV-BDIZC]
-    pub p: Status,
-}
-
-impl Mos6502RegisterFile {
-    /// Some arbitrary values giving an
-    /// incosistent state to catch bugs
-    pub fn new() -> Self {
-        Self {
-            pc: 0xFF55,
-            a: 0xAA,
-            x: 0xCC,
-            y: 0xD2,
-            sp: 0x01,
-            p: Status::empty(),
-        }
-    }
-
-    pub fn reset(&mut self) {
-        // Hardware sets few flags, everything else is initialized
-        // by software.
-        self.p.set(Status::INT_DIS, true);
-        self.p.set(Status::_IGNORED, true);
-        self.p.set(Status::BCD, false);
-
-        // Stack pointer is not set! In some configurations that might
-        // not even be useful, e.g. if the only type of memory is ROM.
-        // The software is expected to initialize the stack pointer to
-        // use interrupts and subroutine calls.
-    }
-}
-
-impl Default for Mos6502RegisterFile {
-    fn default() -> Self {
-        Mos6502RegisterFile::new()
-    }
-}
+pub const NMI_VECTOR: u16 = 0xFFFA;
 
 /// Run normal exit
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -151,7 +82,7 @@ where
     M: Memory,
 {
     mem: &'memory mut M,
-    regf: Mos6502RegisterFile,
+    regf: RegisterFile,
     // The target might not provide better options than
     // plain atomic store and loads. Should be a room
     // for perf optimization.
@@ -170,7 +101,7 @@ where
     pub fn new(memory: &'memory mut M) -> Self {
         Self {
             mem: memory,
-            regf: Mos6502RegisterFile::default(),
+            regf: RegisterFile::default(),
             reset_pending: AtomicBool::new(false),
             nmi_pending: AtomicBool::new(false),
             irq_pending: AtomicBool::new(false),
@@ -179,7 +110,7 @@ where
         }
     }
 
-    pub fn with_registers(memory: &'memory mut M, regf: Mos6502RegisterFile) -> Self {
+    pub fn with_registers(memory: &'memory mut M, regf: RegisterFile) -> Self {
         Self {
             mem: memory,
             regf,
@@ -203,7 +134,7 @@ where
         self.nmi_pending.store(true, Ordering::Release);
     }
 
-    pub fn registers(&self) -> &Mos6502RegisterFile {
+    pub fn registers(&self) -> &RegisterFile {
         &self.regf
     }
 
@@ -215,7 +146,7 @@ where
         self.mem.write(addr, value).map_err(RunError::MemoryAccess)
     }
 
-    fn get_u16_at(&self, addr: u16) -> Result<u16, RunError> {
+    fn load_u16(&self, addr: u16) -> Result<u16, RunError> {
         let lo = self.mem.read(addr).map_err(RunError::MemoryAccess)?;
         let hi = self
             .mem
@@ -231,161 +162,213 @@ where
         match addr_mode {
             AddressMode::Implicit => Err(RunError::InvalidInstruction(self.last_opcode)),
             AddressMode::Immediate | AddressMode::Relative => {
-                let ea = self.regf.pc;
-                self.regf.pc = self.regf.pc.wrapping_add(1);
+                let ea = self.regf.pc();
+                *self.regf.pc_mut() = self.regf.pc().wrapping_add(1);
 
                 Ok(ea)
             }
             AddressMode::Indirect => {
-                let ptr = self.get_u16_at(self.regf.pc)?;
-                self.regf.pc = self.regf.pc.wrapping_add(2);
-                let ea = self.get_u16_at(ptr)?;
+                let ptr = self.load_u16(self.regf.pc())?;
+                *self.regf.pc_mut() = self.regf.pc().wrapping_add(2);
+                let ea = self.load_u16(ptr)?;
 
                 Ok(ea)
             }
             AddressMode::Xindirect => {
-                let ptr = self.load_u8(self.regf.pc)?.wrapping_add(self.regf.x).into();
-                self.regf.pc = self.regf.pc.wrapping_add(1);
-                let ea = self.get_u16_at(ptr)?;
+                let ptr = self
+                    .load_u8(self.regf.pc())?
+                    .wrapping_add(self.regf.x())
+                    .into();
+                *self.regf.pc_mut() = self.regf.pc().wrapping_add(1);
+                let ea = self.load_u16(ptr)?;
 
                 Ok(ea)
             }
             AddressMode::IndirectY => {
-                let ptr = self.load_u8(self.regf.pc)?.into();
-                self.regf.pc = self.regf.pc.wrapping_add(1);
-                let ea = self.get_u16_at(ptr)?.wrapping_add(self.regf.y.into());
+                let ptr = self.load_u8(self.regf.pc())?.into();
+                *self.regf.pc_mut() = self.regf.pc().wrapping_add(1);
+                let ea = self.load_u16(ptr)?.wrapping_add(self.regf.y().into());
 
                 Ok(ea)
             }
             AddressMode::Absolute => {
-                let ea = self.get_u16_at(self.regf.pc)?;
-                self.regf.pc = self.regf.pc.wrapping_add(2);
+                let ea = self.load_u16(self.regf.pc())?;
+                *self.regf.pc_mut() = self.regf.pc().wrapping_add(2);
 
                 Ok(ea)
             }
             AddressMode::AbsoluteX => {
                 let ea = self
-                    .get_u16_at(self.regf.pc)?
-                    .wrapping_add(self.regf.x.into());
-                self.regf.pc = self.regf.pc.wrapping_add(2);
+                    .load_u16(self.regf.pc())?
+                    .wrapping_add(self.regf.x().into());
+                *self.regf.pc_mut() = self.regf.pc().wrapping_add(2);
 
                 Ok(ea)
             }
             AddressMode::AbsoluteY => {
                 let ea = self
-                    .get_u16_at(self.regf.pc)?
-                    .wrapping_add(self.regf.y.into());
-                self.regf.pc = self.regf.pc.wrapping_add(2);
+                    .load_u16(self.regf.pc())?
+                    .wrapping_add(self.regf.y().into());
+                *self.regf.pc_mut() = self.regf.pc().wrapping_add(2);
 
                 Ok(ea)
             }
             AddressMode::Zeropage => {
-                let ea = self.load_u8(self.regf.pc)?.into();
-                self.regf.pc = self.regf.pc.wrapping_add(1);
+                let ea = self.load_u8(self.regf.pc())?.into();
+                *self.regf.pc_mut() = self.regf.pc().wrapping_add(1);
 
                 Ok(ea)
             }
             AddressMode::ZeropageX => {
-                let ea = self.load_u8(self.regf.pc)?.wrapping_add(self.regf.x).into();
-                self.regf.pc = self.regf.pc.wrapping_add(1);
+                let ea = self
+                    .load_u8(self.regf.pc())?
+                    .wrapping_add(self.regf.x())
+                    .into();
+                *self.regf.pc_mut() = self.regf.pc().wrapping_add(1);
 
                 Ok(ea)
             }
             AddressMode::ZeropageY => {
-                let ea = self.load_u8(self.regf.pc)?.wrapping_add(self.regf.y).into();
-                self.regf.pc = self.regf.pc.wrapping_add(1);
+                let ea = self
+                    .load_u8(self.regf.pc())?
+                    .wrapping_add(self.regf.y())
+                    .into();
+                *self.regf.pc_mut() = self.regf.pc().wrapping_add(1);
 
                 Ok(ea)
             }
         }
     }
 
-    fn jump_indirect(&mut self, pc_ptr: [u16; 2]) -> Result<(), RunError> {
-        let lo_pc = self.mem.read(pc_ptr[0]).map_err(RunError::MemoryAccess)?;
-        let hi_pc = self.mem.read(pc_ptr[1]).map_err(RunError::MemoryAccess)?;
-        self.regf.pc = u16::from_le_bytes([lo_pc, hi_pc]);
+    fn jump_indirect(&mut self, pc_ptr: u16) -> Result<(), RunError> {
+        *self.regf.pc_mut() = self.load_u16(pc_ptr)?;
 
         Ok(())
+    }
+
+    #[inline]
+    fn update_flags_on_transfer(&mut self, reg: Register) {
+        let data = self.regf.reg(reg);
+        if data == 0 {
+            self.regf.set_flag(Status::ZERO);
+        } else {
+            self.regf.clear_flag(Status::ZERO);
+        }
+        if (data as i8) < 0 {
+            self.regf.set_flag(Status::NEGATIVE);
+        } else {
+            self.regf.clear_flag(Status::NEGATIVE);
+        }
+    }
+
+    #[inline]
+    fn mem_to_reg(&mut self, addr_mode: AddressMode, reg: Register) -> Result<(), RunError> {
+        let ea = self.get_effective_address(addr_mode)?;
+        let data = self.load_u8(ea)?;
+        *self.regf.reg_mut(reg) = data;
+        self.update_flags_on_transfer(reg);
+
+        Ok(())
+    }
+
+    #[inline]
+    fn reg_to_mem(&mut self, reg: Register, addr_mode: AddressMode) -> Result<(), RunError> {
+        let ea = self.get_effective_address(addr_mode)?;
+        self.store_u8(ea, self.regf.reg(reg))?;
+
+        Ok(())
+    }
+
+    #[inline]
+    fn reg_to_reg(&mut self, reg_src: Register, reg_dst: Register) {
+        *self.regf.reg_mut(reg_dst) = self.regf.reg(reg_src);
+        self.update_flags_on_transfer(reg_dst);
     }
 
     fn step(&mut self) -> Result<RunExit, RunError> {
         // Fetch instruction
         self.last_opcode = self
             .mem
-            .read(self.regf.pc)
+            .read(self.regf.pc())
             .map_err(RunError::CannotFetchInstruction)?;
+        *self.regf.pc_mut() = self.regf.pc().wrapping_add(1);
+
         let insn = crate::insns::get_insn_by_opcode(self.last_opcode);
         match insn {
             // Group 0b00. Flags, conditionals, jumps, misc. There are a few
             // quite complex instructions here.
-            Insn::BCC(addr_mode) => self.bcc(addr_mode),
-            Insn::BCS(addr_mode) => self.bcs(addr_mode),
-            Insn::BEQ(addr_mode) => self.beq(addr_mode),
-            Insn::BIT(addr_mode) => self.bit(addr_mode),
-            Insn::BMI(addr_mode) => self.bmi(addr_mode),
-            Insn::BNE(addr_mode) => self.bne(addr_mode),
-            Insn::BPL(addr_mode) => self.bpl(addr_mode),
+            Insn::BCC(_addr_mode) => todo!("bcc"),
+            Insn::BCS(_addr_mode) => todo!("bcs"),
+            Insn::BEQ(_addr_mode) => todo!("beq"),
+            Insn::BIT(_addr_mode) => todo!("bit"),
+            Insn::BMI(_addr_mode) => todo!("bmi"),
+            Insn::BNE(_addr_mode) => todo!("bne"),
+            Insn::BPL(_addr_mode) => todo!("bpl"),
             Insn::BRK => {
-                self.brk()?;
+                todo!("brk");
                 return Ok(RunExit::Break);
             }
-            Insn::BVC(addr_mode) => self.bvc(addr_mode),
-            Insn::BVS(addr_mode) => self.bvs(addr_mode),
-            Insn::CLC => self.clc(),
-            Insn::CLD => self.cld(),
-            Insn::CLI => self.cli(),
-            Insn::CLV => self.clv(),
-            Insn::CPX(addr_mode) => self.cpx(addr_mode),
-            Insn::CPY(addr_mode) => self.cpy(addr_mode),
-            Insn::DEY => self.dey(),
-            Insn::INX => self.inx(),
-            Insn::INY => self.iny(),
-            Insn::JMP(addr_mode) => self.jmp(addr_mode),
-            Insn::JSR(addr_mode) => self.jsr(addr_mode),
-            Insn::LDY(addr_mode) => self.ldy(addr_mode),
-            Insn::PHA => self.pha(),
-            Insn::PHP => self.php(),
-            Insn::PLA => self.pla(),
-            Insn::PLP => self.plp(),
-            Insn::RTI => self.rti(),
-            Insn::RTS => self.rts(),
-            Insn::SEC => self.sec(),
-            Insn::SED => self.sed(),
-            Insn::SEI => self.sei(),
-            Insn::STY(addr_mode) => self.sty(addr_mode),
-            Insn::TAY => self.tay(),
-            Insn::TYA => self.tya(),
-            // Group 0b01. ALU instructions, very regular encoding
-            // to make decoding and execution faster in hardware.
-            Insn::ADC(addr_mode) => self.adc(addr_mode),
-            Insn::AND(addr_mode) => self.and(addr_mode),
-            Insn::CMP(addr_mode) => self.cmp(addr_mode),
-            Insn::EOR(addr_mode) => self.eor(addr_mode),
-            Insn::LDA(addr_mode) => self.lda(addr_mode),
-            Insn::ORA(addr_mode) => self.ora(addr_mode),
-            Insn::SBC(addr_mode) => self.sbc(addr_mode),
-            Insn::STA(addr_mode) => self.sta(addr_mode),
+            Insn::BVC(_addr_mode) => todo!("bvc"),
+            Insn::BVS(_addr_mode) => todo!("bvs"),
+            Insn::CLC => self.regf.clear_flag(Status::CARRY),
+            Insn::CLD => self.regf.clear_flag(Status::DECIMAL),
+            Insn::CLI => self.regf.clear_flag(Status::INTERRUPT_DISABLE),
+            Insn::CLV => self.regf.clear_flag(Status::OVERFLOW),
+            Insn::CPX(_addr_mode) => todo!("cpx"),
+            Insn::CPY(_addr_mode) => todo!("cpy"),
+            Insn::DEY => todo!("dey"),
+            Insn::INX => todo!("inx"),
+            Insn::INY => todo!("iny"),
+            Insn::JMP(addr_mode) => {
+                let pc_ptr = self.get_effective_address(addr_mode)?;
+                *self.regf.pc_mut() = self.load_u16(pc_ptr)?
+            }
+            Insn::JSR(_addr_mode) => todo!("jsr"),
+            Insn::LDY(addr_mode) => self.mem_to_reg(addr_mode, Register::Y)?,
+            Insn::PHA => todo!("pha"),
+            Insn::PHP => todo!("php"),
+            Insn::PLA => todo!("pla"),
+            Insn::PLP => todo!("plp"),
+            Insn::RTI => todo!("rti"),
+            Insn::RTS => todo!("rts"),
+            Insn::SEC => self.regf.set_flag(Status::CARRY),
+            Insn::SED => self.regf.set_flag(Status::DECIMAL),
+            Insn::SEI => self.regf.set_flag(Status::INTERRUPT_DISABLE),
+            Insn::STY(addr_mode) => self.reg_to_mem(Register::Y, addr_mode)?,
+            Insn::TAY => self.reg_to_reg(Register::A, Register::Y),
+            Insn::TYA => self.reg_to_reg(Register::Y, Register::A),
+            // Group 0b01. ALU instructions and load/store for the accumulator.
+            // Very regular encoding to make decoding and execution for the common path
+            // faster in hardware presumably.
+            Insn::ADC(_addr_mode) => todo!("adc"),
+            Insn::AND(_addr_mode) => todo!("and"),
+            Insn::CMP(_addr_mode) => todo!("cmp"),
+            Insn::EOR(_addr_mode) => todo!("eor"),
+            Insn::LDA(addr_mode) => self.mem_to_reg(addr_mode, Register::A)?,
+            Insn::ORA(_addr_mode) => todo!("ora"),
+            Insn::SBC(_addr_mode) => todo!("sbc"),
+            Insn::STA(addr_mode) => self.reg_to_mem(Register::A, addr_mode)?,
             // Group 0b10. Bit operation and accumulator operations,
             // less regular than the ALU group.
-            Insn::ASL(addr_mode) => self.asl(addr_mode),
-            Insn::DEC(addr_mode) => self.dec(addr_mode),
-            Insn::DEX => self.dex(),
-            Insn::INC(addr_mode) => self.inc(addr_mode),
-            Insn::LDX(addr_mode) => self.ldx(addr_mode),
-            Insn::LSR(addr_mode) => self.lsr(addr_mode),
-            Insn::NOP => self.nop(),
-            Insn::ROL(addr_mode) => self.rol(addr_mode),
-            Insn::ROR(addr_mode) => self.ror(addr_mode),
-            Insn::STX(addr_mode) => self.stx(addr_mode),
-            Insn::TAX => self.tax(),
-            Insn::TSX => self.tsx(),
-            Insn::TXA => self.txa(),
-            Insn::TXS => self.txs(),
+            Insn::ASL(_addr_mode) => todo!("asl"),
+            Insn::DEC(_addr_mode) => todo!("dec"),
+            Insn::DEX => todo!("dex"),
+            Insn::INC(_addr_mode) => todo!("inc"),
+            Insn::LDX(addr_mode) => self.mem_to_reg(addr_mode, Register::X)?,
+            Insn::LSR(_addr_mode) => todo!("lsr"),
+            Insn::NOP => {}
+            Insn::ROL(_addr_mode) => todo!("rol"),
+            Insn::ROR(_addr_mode) => todo!("ror"),
+            Insn::STX(addr_mode) => self.reg_to_mem(Register::X, addr_mode)?,
+            Insn::TAX => self.reg_to_reg(Register::A, Register::X),
+            Insn::TSX => self.reg_to_reg(Register::SP, Register::X),
+            Insn::TXA => self.reg_to_reg(Register::X, Register::A),
+            Insn::TXS => self.reg_to_reg(Register::X, Register::SP),
             // Group 0b11 contains invalid instructions
             Insn::JAM => {
                 return Err(RunError::InvalidInstruction(self.last_opcode));
             }
-        }?;
+        };
 
         Ok(RunExit::InstructionExecuted(insn))
     }
@@ -412,7 +395,9 @@ where
             self.nmi_pending.store(false, Ordering::Release);
             return Ok(RunExit::NonMaskableInterrupt);
         }
-        if !self.regf.p.contains(Status::INT_DIS) && self.irq_pending.load(Ordering::Acquire) {
+        if !self.regf.flag_set(Status::INTERRUPT_DISABLE)
+            && self.irq_pending.load(Ordering::Acquire)
+        {
             self.jump_indirect(IRQ_VECTOR)?;
             self.irq_pending.store(false, Ordering::Release);
             return Ok(RunExit::Interrupt);
@@ -428,332 +413,5 @@ where
             }
             Ok(o) => Ok(o),
         }
-    }
-
-    #[inline]
-    fn bcc(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("bcc")
-    }
-
-    #[inline]
-    fn bcs(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("bcs")
-    }
-
-    #[inline]
-    fn beq(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("beq")
-    }
-
-    #[inline]
-    fn bit(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("bit")
-    }
-
-    #[inline]
-    fn bmi(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("bmi")
-    }
-
-    #[inline]
-    fn bne(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("bne")
-    }
-
-    #[inline]
-    fn bpl(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("bpl")
-    }
-
-    #[inline]
-    fn brk(&mut self) -> Result<(), RunError> {
-        todo!("brk")
-    }
-
-    #[inline]
-    fn bvc(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("bvc")
-    }
-
-    #[inline]
-    fn bvs(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("bvs")
-    }
-
-    #[inline]
-    fn clc(&mut self) -> Result<(), RunError> {
-        todo!("clc")
-    }
-
-    #[inline]
-    fn cld(&mut self) -> Result<(), RunError> {
-        todo!("cld")
-    }
-
-    #[inline]
-    fn cli(&mut self) -> Result<(), RunError> {
-        todo!("cli")
-    }
-
-    #[inline]
-    fn clv(&mut self) -> Result<(), RunError> {
-        todo!("clv")
-    }
-
-    #[inline]
-    fn cpx(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("cpx")
-    }
-
-    #[inline]
-    fn cpy(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("cpy")
-    }
-
-    #[inline]
-    fn dey(&mut self) -> Result<(), RunError> {
-        todo!("dey")
-    }
-
-    #[inline]
-    fn inx(&mut self) -> Result<(), RunError> {
-        todo!("inx")
-    }
-
-    #[inline]
-    fn iny(&mut self) -> Result<(), RunError> {
-        todo!("iny")
-    }
-
-    #[inline]
-    fn jmp(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("jmp")
-    }
-
-    #[inline]
-    fn jsr(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("jsr")
-    }
-
-    #[inline]
-    fn ldy(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
-        self.regf.pc = self.regf.pc.wrapping_add(1);
-
-        let ea = self.get_effective_address(addr_mode)?;
-        let data = self.load_u8(ea)?;
-        self.regf.y = data;
-        self.regf.p.set(Status::ZERO, self.regf.y == 0);
-        self.regf.p.set(Status::NEG, (self.regf.y as i8) < 0);
-
-        Ok(())
-    }
-
-    #[inline]
-    fn pha(&mut self) -> Result<(), RunError> {
-        todo!("pha")
-    }
-
-    #[inline]
-    fn php(&mut self) -> Result<(), RunError> {
-        todo!("php")
-    }
-
-    #[inline]
-    fn pla(&mut self) -> Result<(), RunError> {
-        todo!("pla")
-    }
-
-    #[inline]
-    fn plp(&mut self) -> Result<(), RunError> {
-        todo!("plp")
-    }
-
-    #[inline]
-    fn rti(&mut self) -> Result<(), RunError> {
-        todo!("rti")
-    }
-
-    #[inline]
-    fn rts(&mut self) -> Result<(), RunError> {
-        todo!("rts")
-    }
-
-    #[inline]
-    fn sec(&mut self) -> Result<(), RunError> {
-        todo!("sec")
-    }
-
-    #[inline]
-    fn sed(&mut self) -> Result<(), RunError> {
-        todo!("sed")
-    }
-
-    #[inline]
-    fn sei(&mut self) -> Result<(), RunError> {
-        todo!("sei")
-    }
-
-    #[inline]
-    fn sty(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
-        self.regf.pc = self.regf.pc.wrapping_add(1);
-
-        let ea = self.get_effective_address(addr_mode)?;
-        self.store_u8(ea, self.regf.y)?;
-
-        Ok(())
-    }
-
-    #[inline]
-    fn tay(&mut self) -> Result<(), RunError> {
-        todo!("tay")
-    }
-
-    #[inline]
-    fn tya(&mut self) -> Result<(), RunError> {
-        todo!("tya")
-    }
-
-    #[inline]
-    fn adc(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("adc")
-    }
-
-    #[inline]
-    fn and(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("and")
-    }
-
-    #[inline]
-    fn cmp(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("cmp")
-    }
-
-    #[inline]
-    fn eor(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("eor")
-    }
-
-    #[inline]
-    fn lda(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
-        self.regf.pc = self.regf.pc.wrapping_add(1);
-
-        let ea = self.get_effective_address(addr_mode)?;
-        let data = self.load_u8(ea)?;
-        self.regf.a = data;
-        self.regf.p.set(Status::ZERO, self.regf.a == 0);
-        self.regf.p.set(Status::NEG, (self.regf.a as i8) < 0);
-
-        Ok(())
-    }
-
-    #[inline]
-    fn ora(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
-        self.regf.pc = self.regf.pc.wrapping_add(1);
-
-        let ea = self.get_effective_address(addr_mode)?;
-        let data = self.load_u8(ea)?;
-        self.regf.a |= data;
-        self.regf.p.set(Status::ZERO, self.regf.a == 0);
-        self.regf.p.set(Status::NEG, (self.regf.a as i8) < 0);
-
-        Ok(())
-    }
-
-    #[inline]
-    fn sbc(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("sbc")
-    }
-
-    #[inline]
-    fn sta(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
-        self.regf.pc = self.regf.pc.wrapping_add(1);
-
-        let ea = self.get_effective_address(addr_mode)?;
-        self.store_u8(ea, self.regf.a)?;
-
-        Ok(())
-    }
-
-    #[inline]
-    fn asl(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("asl")
-    }
-
-    #[inline]
-    fn dec(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("dec")
-    }
-
-    #[inline]
-    fn dex(&mut self) -> Result<(), RunError> {
-        todo!("dex")
-    }
-
-    #[inline]
-    fn inc(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("inc")
-    }
-
-    #[inline]
-    fn ldx(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
-        self.regf.pc = self.regf.pc.wrapping_add(1);
-
-        let ea = self.get_effective_address(addr_mode)?;
-        let data = self.load_u8(ea)?;
-        self.regf.x = data;
-        self.regf.p.set(Status::ZERO, self.regf.x == 0);
-        self.regf.p.set(Status::NEG, (self.regf.x as i8) < 0);
-
-        Ok(())
-    }
-
-    #[inline]
-    fn lsr(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("lsr")
-    }
-
-    #[inline]
-    fn nop(&mut self) -> Result<(), RunError> {
-        todo!("nop")
-    }
-
-    #[inline]
-    fn rol(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("rol")
-    }
-
-    #[inline]
-    fn ror(&mut self, _addr_mode: AddressMode) -> Result<(), RunError> {
-        todo!("ror")
-    }
-
-    #[inline]
-    fn stx(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
-        self.regf.pc = self.regf.pc.wrapping_add(1);
-
-        let ea = self.get_effective_address(addr_mode)?;
-        self.store_u8(ea, self.regf.x)?;
-
-        Ok(())
-    }
-
-    #[inline]
-    fn tax(&mut self) -> Result<(), RunError> {
-        todo!("tax")
-    }
-
-    #[inline]
-    fn tsx(&mut self) -> Result<(), RunError> {
-        todo!("tsx")
-    }
-
-    #[inline]
-    fn txa(&mut self) -> Result<(), RunError> {
-        todo!("txa")
-    }
-
-    #[inline]
-    fn txs(&mut self) -> Result<(), RunError> {
-        todo!("txs")
     }
 }

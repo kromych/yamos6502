@@ -253,13 +253,27 @@ where
     }
 
     #[inline]
-    fn mem_to_reg(&mut self, addr_mode: AddressMode, reg: Register) -> Result<(), RunError> {
+    fn read_modify_to_reg<F>(
+        &mut self,
+        addr_mode: AddressMode,
+        reg: Register,
+        modify: F,
+    ) -> Result<(), RunError>
+    where
+        F: Fn(u8) -> u8,
+    {
         let ea = self.get_effective_address(addr_mode)?;
         let data = self.read_u8(ea)?;
+        let data = modify(data);
         *self.regf.reg_mut(reg) = data;
         self.update_flags_nz(self.regf.reg(reg));
 
         Ok(())
+    }
+
+    #[inline]
+    fn mem_to_reg(&mut self, addr_mode: AddressMode, reg: Register) -> Result<(), RunError> {
+        self.read_modify_to_reg(addr_mode, reg, |v| v)
     }
 
     #[inline]
@@ -362,11 +376,20 @@ where
             // Very regular encoding to make decoding and execution for the common path
             // faster in hardware (presumably).
             Insn::ADC(_addr_mode) => todo!("adc"),
-            Insn::AND(_addr_mode) => todo!("and"),
+            Insn::AND(addr_mode) => {
+                let a = self.regf.a();
+                self.read_modify_to_reg(addr_mode, Register::A, |v| v & a)?
+            }
             Insn::CMP(_addr_mode) => todo!("cmp"),
-            Insn::EOR(_addr_mode) => todo!("eor"),
+            Insn::EOR(addr_mode) => {
+                let a = self.regf.a();
+                self.read_modify_to_reg(addr_mode, Register::A, |v| v ^ a)?
+            }
             Insn::LDA(addr_mode) => self.mem_to_reg(addr_mode, Register::A)?,
-            Insn::ORA(_addr_mode) => todo!("ora"),
+            Insn::ORA(addr_mode) => {
+                let a = self.regf.a();
+                self.read_modify_to_reg(addr_mode, Register::A, |v| v | a)?
+            }
             Insn::SBC(_addr_mode) => todo!("sbc"),
             Insn::STA(addr_mode) => self.reg_to_mem(Register::A, addr_mode)?,
             // Group 0b10. Bit operation and accumulator operations,
@@ -386,9 +409,9 @@ where
             Insn::ROR(_addr_mode) => todo!("ror"),
             Insn::STX(addr_mode) => self.reg_to_mem(Register::X, addr_mode)?,
             Insn::TAX => self.reg_to_reg(Register::A, Register::X),
-            Insn::TSX => self.reg_to_reg(Register::SP, Register::X),
+            Insn::TSX => self.reg_to_reg(Register::S, Register::X),
             Insn::TXA => self.reg_to_reg(Register::X, Register::A),
-            Insn::TXS => self.reg_to_reg(Register::X, Register::SP),
+            Insn::TXS => self.reg_to_reg(Register::X, Register::S),
             // Group 0b11 contains invalid instructions
             Insn::JAM => {
                 return Err(RunError::InvalidInstruction(self.last_opcode));

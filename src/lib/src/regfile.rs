@@ -48,7 +48,7 @@ pub enum Register {
     /// Status register [NV-BDIZC]
     P = 3,
     /// Stack pointer. The stack grows top-down
-    SP = 4,
+    S = 4,
 }
 
 /// MOS 6502 register file
@@ -108,7 +108,7 @@ impl RegisterFile {
 
     #[inline]
     pub fn sp(&self) -> u8 {
-        self.reg(Register::SP)
+        self.reg(Register::S)
     }
 
     #[inline]
@@ -133,7 +133,7 @@ impl RegisterFile {
 
     #[inline]
     pub fn sp_mut(&mut self) -> &mut u8 {
-        &mut self.r[(Register::SP as u8) as usize]
+        &mut self.r[(Register::S as u8) as usize]
     }
 
     #[inline]

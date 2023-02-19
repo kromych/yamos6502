@@ -395,6 +395,18 @@ where
         Ok(())
     }
 
+    #[inline]
+    fn compare_reg_mem(&mut self, reg: Register, addr_mode: AddressMode) -> Result<(), RunError> {
+        let ea = self.get_effective_address(addr_mode)?;
+        let memv = self.read_u8(ea)?;
+        let regv = self.reg_file.reg(reg);
+
+        self.update_flags_nz(regv.wrapping_sub(memv));
+        self.reg_file.set_flag_from_cond(Status::Carry, regv < memv);
+
+        Ok(())
+    }
+
     fn step(&mut self) -> Result<RunExit, RunError> {
         // Fetch instruction
         self.last_opcode = self
@@ -434,8 +446,8 @@ where
             Insn::CLD => self.reg_file.clear_flag(Status::Decimal),
             Insn::CLI => self.reg_file.clear_flag(Status::InterruptDisable),
             Insn::CLV => self.reg_file.clear_flag(Status::Overflow),
-            Insn::CPX(_addr_mode) => todo!("cpx"),
-            Insn::CPY(_addr_mode) => todo!("cpy"),
+            Insn::CPX(addr_mode) => self.compare_reg_mem(Register::X, addr_mode)?,
+            Insn::CPY(addr_mode) => self.compare_reg_mem(Register::Y, addr_mode)?,
             Insn::DEY => self.read_modify_write_reg(Register::Y, |v| v.wrapping_sub(1)),
             Insn::INX => self.read_modify_write_reg(Register::X, |v| v.wrapping_add(1)),
             Insn::INY => self.read_modify_write_reg(Register::Y, |v| v.wrapping_add(1)),
@@ -497,7 +509,7 @@ where
                 let a = self.reg_file.a();
                 self.read_modify_to_reg(addr_mode, Register::A, |v| v & a)?;
             }
-            Insn::CMP(_addr_mode) => todo!("cmp"),
+            Insn::CMP(addr_mode) => self.compare_reg_mem(Register::A, addr_mode)?,
             Insn::EOR(addr_mode) => {
                 let a = self.reg_file.a();
                 self.read_modify_to_reg(addr_mode, Register::A, |v| v ^ a)?;

@@ -71,9 +71,9 @@ impl RegisterFile {
     pub fn reset(&mut self) {
         // Hardware sets few flags, everything else is initialized
         // by software.
-        self.set_flag_from_cond(Status::InterruptDisable, true);
-        self.set_flag_from_cond(Status::AlwaysSet, true);
-        self.set_flag_from_cond(Status::Decimal, false);
+        *self.reg_mut(Register::P) = 0;
+        self.set_flag(Status::InterruptDisable);
+        self.set_flag(Status::AlwaysSet);
 
         // Stack pointer is not set! In some configurations that might
         // not even be useful, e.g. if the only type of memory is ROM.

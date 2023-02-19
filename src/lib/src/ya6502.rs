@@ -246,10 +246,11 @@ where
     }
 
     #[inline]
-    fn update_flags_on_transfer(&mut self, reg: Register) {
+    fn update_flags_nz(&mut self, reg: Register) {
         let data = self.regf.reg(reg);
-        self.regf.set_flag_cond(Status::Zero, data == 0);
-        self.regf.set_flag_cond(Status::Negative, (data as i8) < 0);
+        self.regf.set_flag_from_cond(Status::Zero, data == 0);
+        self.regf
+            .set_flag_from_cond(Status::Negative, (data as i8) < 0);
     }
 
     #[inline]
@@ -257,7 +258,7 @@ where
         let ea = self.get_effective_address(addr_mode)?;
         let data = self.load_u8(ea)?;
         *self.regf.reg_mut(reg) = data;
-        self.update_flags_on_transfer(reg);
+        self.update_flags_nz(reg);
 
         Ok(())
     }
@@ -273,7 +274,7 @@ where
     #[inline]
     fn reg_to_reg(&mut self, reg_src: Register, reg_dst: Register) {
         *self.regf.reg_mut(reg_dst) = self.regf.reg(reg_src);
-        self.update_flags_on_transfer(reg_dst);
+        self.update_flags_nz(reg_dst);
     }
 
     fn step(&mut self) -> Result<RunExit, RunError> {
@@ -284,7 +285,10 @@ where
             .map_err(RunError::CannotFetchInstruction)?;
         self.regf.adjust_pc_by(1);
 
-        let insn = crate::insns::get_insn_by_opcode(self.last_opcode);
+        // Decode instruction from the opcode
+        let insn = crate::insns::decode_insn(self.last_opcode);
+
+        // Execute instruction
         match insn {
             // Group 0b00. Flags, conditionals, jumps, misc. There are a few
             // quite complex instructions here.
@@ -330,7 +334,7 @@ where
             Insn::TYA => self.reg_to_reg(Register::Y, Register::A),
             // Group 0b01. ALU instructions and load/store for the accumulator.
             // Very regular encoding to make decoding and execution for the common path
-            // faster in hardware presumably.
+            // faster in hardware (presumably).
             Insn::ADC(_addr_mode) => todo!("adc"),
             Insn::AND(_addr_mode) => todo!("and"),
             Insn::CMP(_addr_mode) => todo!("cmp"),

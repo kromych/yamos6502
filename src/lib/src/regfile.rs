@@ -71,9 +71,9 @@ impl RegisterFile {
     pub fn reset(&mut self) {
         // Hardware sets few flags, everything else is initialized
         // by software.
-        self.set_flag_cond(Status::InterruptDisable, true);
-        self.set_flag_cond(Status::_IgnoredAlwaysOne, true);
-        self.set_flag_cond(Status::Decimal, false);
+        self.set_flag_from_cond(Status::InterruptDisable, true);
+        self.set_flag_from_cond(Status::_IgnoredAlwaysOne, true);
+        self.set_flag_from_cond(Status::Decimal, false);
 
         // Stack pointer is not set! In some configurations that might
         // not even be useful, e.g. if the only type of memory is ROM.
@@ -152,19 +152,19 @@ impl RegisterFile {
     }
 
     #[inline]
-    pub fn set_flag_cond(&mut self, flag: Status, cond: bool) {
+    pub fn set_flag_from_cond(&mut self, flag: Status, cond: bool) {
         let p = self.reg_mut(Register::P);
         *p = (*p & !flag.mask()) | (cond as u8) << (flag as u8);
     }
 
     #[inline]
     pub fn set_flag(&mut self, flag: Status) {
-        self.set_flag_cond(flag, true)
+        self.set_flag_from_cond(flag, true)
     }
 
     #[inline]
     pub fn clear_flag(&mut self, flag: Status) {
-        self.set_flag_cond(flag, false)
+        self.set_flag_from_cond(flag, false)
     }
 }
 

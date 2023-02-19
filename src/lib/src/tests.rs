@@ -76,60 +76,60 @@ fn test_loads() {
     memory.write_u16(0x000f, 0xbbba);
 
     let program = [
-        get_insn_opcode(Insn::LDA(AddressMode::Immediate)),
+        encode_insn(Insn::LDA(AddressMode::Immediate)),
         0x12,
-        get_insn_opcode(Insn::LDA(AddressMode::Immediate)),
+        encode_insn(Insn::LDA(AddressMode::Immediate)),
         0x00,
-        get_insn_opcode(Insn::LDA(AddressMode::Immediate)),
+        encode_insn(Insn::LDA(AddressMode::Immediate)),
         0xF2,
-        get_insn_opcode(Insn::LDX(AddressMode::Immediate)),
+        encode_insn(Insn::LDX(AddressMode::Immediate)),
         0x13,
-        get_insn_opcode(Insn::LDX(AddressMode::Immediate)),
+        encode_insn(Insn::LDX(AddressMode::Immediate)),
         0x00,
-        get_insn_opcode(Insn::LDX(AddressMode::Immediate)),
+        encode_insn(Insn::LDX(AddressMode::Immediate)),
         0xF3,
-        get_insn_opcode(Insn::LDY(AddressMode::Immediate)),
+        encode_insn(Insn::LDY(AddressMode::Immediate)),
         0x14,
-        get_insn_opcode(Insn::LDY(AddressMode::Immediate)),
+        encode_insn(Insn::LDY(AddressMode::Immediate)),
         0x00,
-        get_insn_opcode(Insn::LDY(AddressMode::Immediate)),
+        encode_insn(Insn::LDY(AddressMode::Immediate)),
         0xF4,
-        get_insn_opcode(Insn::LDA(AddressMode::Absolute)),
+        encode_insn(Insn::LDA(AddressMode::Absolute)),
         ABSOLUTE_START as u8,
         (ABSOLUTE_START >> 8) as u8,
-        get_insn_opcode(Insn::LDA(AddressMode::AbsoluteX)),
+        encode_insn(Insn::LDA(AddressMode::AbsoluteX)),
         ABSOLUTE_START as u8,
         (ABSOLUTE_START >> 8) as u8,
-        get_insn_opcode(Insn::LDA(AddressMode::AbsoluteY)),
+        encode_insn(Insn::LDA(AddressMode::AbsoluteY)),
         ABSOLUTE_START as u8,
         (ABSOLUTE_START >> 8) as u8,
-        get_insn_opcode(Insn::LDA(AddressMode::Xindirect)),
+        encode_insn(Insn::LDA(AddressMode::Xindirect)),
         0x42,
-        get_insn_opcode(Insn::LDA(AddressMode::IndirectY)),
+        encode_insn(Insn::LDA(AddressMode::IndirectY)),
         0x43,
-        get_insn_opcode(Insn::LDA(AddressMode::Zeropage)),
+        encode_insn(Insn::LDA(AddressMode::Zeropage)),
         0x43,
-        get_insn_opcode(Insn::LDA(AddressMode::ZeropageX)),
+        encode_insn(Insn::LDA(AddressMode::ZeropageX)),
         0x42,
-        get_insn_opcode(Insn::LDX(AddressMode::Absolute)),
+        encode_insn(Insn::LDX(AddressMode::Absolute)),
         ABSOLUTE_START as u8,
         (ABSOLUTE_START >> 8) as u8,
-        get_insn_opcode(Insn::LDX(AddressMode::AbsoluteY)),
+        encode_insn(Insn::LDX(AddressMode::AbsoluteY)),
         ABSOLUTE_START as u8,
         (ABSOLUTE_START >> 8) as u8,
-        get_insn_opcode(Insn::LDX(AddressMode::Zeropage)),
+        encode_insn(Insn::LDX(AddressMode::Zeropage)),
         0x43,
-        get_insn_opcode(Insn::LDX(AddressMode::ZeropageY)),
+        encode_insn(Insn::LDX(AddressMode::ZeropageY)),
         0x43,
-        get_insn_opcode(Insn::LDY(AddressMode::Absolute)),
+        encode_insn(Insn::LDY(AddressMode::Absolute)),
         ABSOLUTE_START as u8,
         (ABSOLUTE_START >> 8) as u8,
-        get_insn_opcode(Insn::LDY(AddressMode::AbsoluteX)),
+        encode_insn(Insn::LDY(AddressMode::AbsoluteX)),
         ABSOLUTE_START as u8,
         (ABSOLUTE_START >> 8) as u8,
-        get_insn_opcode(Insn::LDY(AddressMode::Zeropage)),
+        encode_insn(Insn::LDY(AddressMode::Zeropage)),
         0x43,
-        get_insn_opcode(Insn::LDY(AddressMode::ZeropageX)),
+        encode_insn(Insn::LDY(AddressMode::ZeropageX)),
         0x43,
     ];
 
@@ -313,13 +313,13 @@ fn test_stores() {
     let mut memory = TestMemory::default();
 
     let program = [
-        get_insn_opcode(Insn::STA(AddressMode::Absolute)),
+        encode_insn(Insn::STA(AddressMode::Absolute)),
         ABSOLUTE_START as u8,
         (ABSOLUTE_START >> 8) as u8,
-        get_insn_opcode(Insn::STA(AddressMode::AbsoluteX)),
+        encode_insn(Insn::STA(AddressMode::AbsoluteX)),
         ABSOLUTE_START as u8,
         (ABSOLUTE_START >> 8) as u8,
-        get_insn_opcode(Insn::STA(AddressMode::AbsoluteY)),
+        encode_insn(Insn::STA(AddressMode::AbsoluteY)),
         ABSOLUTE_START as u8,
         (ABSOLUTE_START >> 8) as u8,
         // get_insn_opcode(Insn::STA(AddressMode::IndirectY)),
@@ -371,9 +371,9 @@ fn test_insn() {
         for h in 0..8 {
             for l in 0..8 {
                 let opcode = (h << 5) | (l << 2) | g;
-                let insn = get_insn_by_opcode(opcode);
+                let insn = decode_insn(opcode);
                 if insn.is_valid() {
-                    let same_opcode = get_insn_opcode(insn);
+                    let same_opcode = encode_insn(insn);
                     assert!(same_opcode == opcode);
                 }
             }

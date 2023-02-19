@@ -692,7 +692,7 @@ const INSN_BY_GROUP: [[[Insn; 8]; 8]; 4] = [
     ],
 ];
 
-pub fn get_insn_by_opcode(opcode: u8) -> Insn {
+pub fn decode_insn(opcode: u8) -> Insn {
     let group = (opcode & 0b11) as usize;
     let two_octals = (opcode >> 2) as usize;
     let lo_octal = two_octals & 0b111;
@@ -701,11 +701,7 @@ pub fn get_insn_by_opcode(opcode: u8) -> Insn {
     INSN_BY_GROUP[group][hi_octal][lo_octal]
 }
 
-pub fn get_opcode_string(opcode: u8) -> &'static str {
-    INSN_STR[opcode as usize]
-}
-
-pub fn get_insn_opcode(insn: Insn) -> u8 {
+pub fn encode_insn(insn: Insn) -> u8 {
     match insn {
         Insn::ADC(AddressMode::Absolute) => 0x6d,
         Insn::ADC(AddressMode::AbsoluteX) => 0x7d,
@@ -860,4 +856,8 @@ pub fn get_insn_opcode(insn: Insn) -> u8 {
         Insn::TYA => 0x98,
         _ => 0xff,
     }
+}
+
+pub fn get_opcode_string(opcode: u8) -> &'static str {
+    INSN_STR[opcode as usize]
 }

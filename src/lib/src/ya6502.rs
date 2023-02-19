@@ -138,11 +138,11 @@ where
         &self.regf
     }
 
-    fn load_u8(&self, addr: u16) -> Result<u8, RunError> {
+    fn read_u8(&self, addr: u16) -> Result<u8, RunError> {
         self.mem.read(addr).map_err(RunError::MemoryAccess)
     }
 
-    fn store_u8(&mut self, addr: u16, value: u8) -> Result<(), RunError> {
+    fn write_u8(&mut self, addr: u16, value: u8) -> Result<(), RunError> {
         self.mem.write(addr, value).map_err(RunError::MemoryAccess)
     }
 
@@ -175,7 +175,7 @@ where
             }
             AddressMode::Xindirect => {
                 let ptr = self
-                    .load_u8(self.regf.pc())?
+                    .read_u8(self.regf.pc())?
                     .wrapping_add(self.regf.x())
                     .into();
                 self.regf.adjust_pc_by(1);
@@ -184,7 +184,7 @@ where
                 Ok(ea)
             }
             AddressMode::IndirectY => {
-                let ptr = self.load_u8(self.regf.pc())?.into();
+                let ptr = self.read_u8(self.regf.pc())?.into();
                 self.regf.adjust_pc_by(1);
                 let ea = self.load_u16(ptr)?.wrapping_add(self.regf.y().into());
 
@@ -213,14 +213,14 @@ where
                 Ok(ea)
             }
             AddressMode::Zeropage => {
-                let ea = self.load_u8(self.regf.pc())?.into();
+                let ea = self.read_u8(self.regf.pc())?.into();
                 self.regf.adjust_pc_by(1);
 
                 Ok(ea)
             }
             AddressMode::ZeropageX => {
                 let ea = self
-                    .load_u8(self.regf.pc())?
+                    .read_u8(self.regf.pc())?
                     .wrapping_add(self.regf.x())
                     .into();
                 self.regf.adjust_pc_by(1);
@@ -229,7 +229,7 @@ where
             }
             AddressMode::ZeropageY => {
                 let ea = self
-                    .load_u8(self.regf.pc())?
+                    .read_u8(self.regf.pc())?
                     .wrapping_add(self.regf.y())
                     .into();
                 self.regf.adjust_pc_by(1);
@@ -246,8 +246,7 @@ where
     }
 
     #[inline]
-    fn update_flags_nz(&mut self, reg: Register) {
-        let data = self.regf.reg(reg);
+    fn update_flags_nz(&mut self, data: u8) {
         self.regf.set_flag_from_cond(Status::Zero, data == 0);
         self.regf
             .set_flag_from_cond(Status::Negative, (data as i8) < 0);
@@ -256,9 +255,9 @@ where
     #[inline]
     fn mem_to_reg(&mut self, addr_mode: AddressMode, reg: Register) -> Result<(), RunError> {
         let ea = self.get_effective_address(addr_mode)?;
-        let data = self.load_u8(ea)?;
+        let data = self.read_u8(ea)?;
         *self.regf.reg_mut(reg) = data;
-        self.update_flags_nz(reg);
+        self.update_flags_nz(self.regf.reg(reg));
 
         Ok(())
     }
@@ -266,7 +265,7 @@ where
     #[inline]
     fn reg_to_mem(&mut self, reg: Register, addr_mode: AddressMode) -> Result<(), RunError> {
         let ea = self.get_effective_address(addr_mode)?;
-        self.store_u8(ea, self.regf.reg(reg))?;
+        self.write_u8(ea, self.regf.reg(reg))?;
 
         Ok(())
     }
@@ -274,7 +273,34 @@ where
     #[inline]
     fn reg_to_reg(&mut self, reg_src: Register, reg_dst: Register) {
         *self.regf.reg_mut(reg_dst) = self.regf.reg(reg_src);
-        self.update_flags_nz(reg_dst);
+        self.update_flags_nz(self.regf.reg(reg_dst));
+    }
+
+    fn read_modify_write_mem<F>(
+        &mut self,
+        addr_mode: AddressMode,
+        modify: F,
+    ) -> Result<(), RunError>
+    where
+        F: Fn(u8) -> u8,
+    {
+        let ea = self.get_effective_address(addr_mode)?;
+        let data = self.read_u8(ea)?;
+        let data = modify(data);
+        self.write_u8(ea, data)?;
+        self.update_flags_nz(data);
+
+        Ok(())
+    }
+
+    fn read_modify_write_reg<F>(&mut self, reg: Register, modify: F)
+    where
+        F: Fn(u8) -> u8,
+    {
+        let data = self.regf.reg(reg);
+        let data = modify(data);
+        *self.regf.reg_mut(reg) = data;
+        self.update_flags_nz(data);
     }
 
     fn step(&mut self) -> Result<RunExit, RunError> {
@@ -311,9 +337,9 @@ where
             Insn::CLV => self.regf.clear_flag(Status::Overflow),
             Insn::CPX(_addr_mode) => todo!("cpx"),
             Insn::CPY(_addr_mode) => todo!("cpy"),
-            Insn::DEY => todo!("dey"),
-            Insn::INX => todo!("inx"),
-            Insn::INY => todo!("iny"),
+            Insn::DEY => self.read_modify_write_reg(Register::Y, |v| v.wrapping_sub(1)),
+            Insn::INX => self.read_modify_write_reg(Register::X, |v| v.wrapping_add(1)),
+            Insn::INY => self.read_modify_write_reg(Register::Y, |v| v.wrapping_add(1)),
             Insn::JMP(addr_mode) => {
                 let pc_ptr = self.get_effective_address(addr_mode)?;
                 self.regf.set_pc(self.load_u16(pc_ptr)?);
@@ -347,9 +373,9 @@ where
             // less regular than the ALU group.
             Insn::ASLA => todo!("asl a"),
             Insn::ASL(_addr_mode) => todo!("asl"),
-            Insn::DEC(_addr_mode) => todo!("dec"),
-            Insn::DEX => todo!("dex"),
-            Insn::INC(_addr_mode) => todo!("inc"),
+            Insn::DEC(addr_mode) => self.read_modify_write_mem(addr_mode, |v| v.wrapping_sub(1))?,
+            Insn::DEX => self.read_modify_write_reg(Register::X, |v| v.wrapping_sub(1)),
+            Insn::INC(addr_mode) => self.read_modify_write_mem(addr_mode, |v| v.wrapping_add(1))?,
             Insn::LDX(addr_mode) => self.mem_to_reg(addr_mode, Register::X)?,
             Insn::LSRA => todo!("lsr a"),
             Insn::LSR(_addr_mode) => todo!("lsr"),

@@ -5,8 +5,8 @@
 mod insns;
 mod regfile;
 mod tests;
-mod ya6502;
+mod yamos6502;
 
 pub use crate::insns::*;
 pub use crate::regfile::*;
-pub use crate::ya6502::*;
+pub use crate::yamos6502::*;

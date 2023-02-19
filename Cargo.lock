@@ -3,12 +3,12 @@
 version = 3
 
 [[package]]
-name = "ya6502"
+name = "yamos6502"
 version = "0.1.0"
 
 [[package]]
-name = "ya6502e-rs"
+name = "yamos6502e"
 version = "0.1.0"
 dependencies = [
- "ya6502",
+ "yamos6502",
 ]

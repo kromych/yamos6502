@@ -1,4 +1,4 @@
-use ya6502::Memory;
+use yamos6502::Memory;
 
 struct RomRam {
     cells: Vec<u8>,
@@ -15,22 +15,22 @@ impl RomRam {
 }
 
 impl Memory for RomRam {
-    fn write(&mut self, addr: u16, value: u8) -> Result<(), ya6502::MemoryError> {
+    fn write(&mut self, addr: u16, value: u8) -> Result<(), yamos6502::MemoryError> {
         if addr as usize > self.cells.len() {
-            return Err(ya6502::MemoryError::BadAddress(addr));
+            return Err(yamos6502::MemoryError::BadAddress(addr));
         }
 
         if addr >= self.rom_start {
-            return Err(ya6502::MemoryError::ReadOnlyAddress(addr));
+            return Err(yamos6502::MemoryError::ReadOnlyAddress(addr));
         }
 
         self.cells[addr as usize] = value;
         Ok(())
     }
 
-    fn read(&self, addr: u16) -> Result<u8, ya6502::MemoryError> {
+    fn read(&self, addr: u16) -> Result<u8, yamos6502::MemoryError> {
         if addr as usize > self.cells.len() {
-            return Err(ya6502::MemoryError::BadAddress(addr));
+            return Err(yamos6502::MemoryError::BadAddress(addr));
         }
 
         Ok(self.cells[addr as usize])
@@ -39,7 +39,7 @@ impl Memory for RomRam {
 
 fn main() {
     let mut memory = RomRam::new();
-    let mut mos6502 = ya6502::Mos6502::new(&mut memory);
+    let mut mos6502 = yamos6502::Mos6502::new(&mut memory);
     mos6502.irq(); // Should be ignored
     mos6502.reset();
 

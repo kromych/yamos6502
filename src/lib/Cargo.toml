@@ -1,10 +1,10 @@
 [package]
-name = "ya6502"
+name = "yamos6502"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "ya6502"
+name = "yamos6502"
 path = "src/lib.rs"
 
 [dependencies]

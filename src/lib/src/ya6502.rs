@@ -54,8 +54,6 @@ pub const NMI_VECTOR: u16 = 0xFFFA;
 pub enum RunExit {
     /// Instruction retired
     InstructionExecuted(Insn),
-    /// Break instruction was fetched from the address
-    Break,
     /// Interrupt
     Interrupt,
     /// Non-maskable interrupt
@@ -258,63 +256,69 @@ where
         addr_mode: AddressMode,
         reg: Register,
         modify: F,
-    ) -> Result<(), RunError>
+    ) -> Result<u8, RunError>
     where
         F: Fn(u8) -> u8,
     {
         let ea = self.get_effective_address(addr_mode)?;
-        let data = self.read_u8(ea)?;
-        let data = modify(data);
-        *self.regf.reg_mut(reg) = data;
-        self.update_flags_nz(self.regf.reg(reg));
+        let value = self.read_u8(ea)?;
+        let value = modify(value);
+        *self.regf.reg_mut(reg) = value;
+        self.update_flags_nz(value);
 
-        Ok(())
+        Ok(value)
     }
 
     #[inline]
-    fn mem_to_reg(&mut self, addr_mode: AddressMode, reg: Register) -> Result<(), RunError> {
+    fn mem_to_reg(&mut self, addr_mode: AddressMode, reg: Register) -> Result<u8, RunError> {
         self.read_modify_to_reg(addr_mode, reg, |v| v)
     }
 
     #[inline]
-    fn reg_to_mem(&mut self, reg: Register, addr_mode: AddressMode) -> Result<(), RunError> {
+    fn reg_to_mem(&mut self, reg: Register, addr_mode: AddressMode) -> Result<u8, RunError> {
         let ea = self.get_effective_address(addr_mode)?;
-        self.write_u8(ea, self.regf.reg(reg))?;
+        let value = self.regf.reg(reg);
+        self.write_u8(ea, value)?;
 
-        Ok(())
+        Ok(value)
     }
 
     #[inline]
-    fn reg_to_reg(&mut self, reg_src: Register, reg_dst: Register) {
+    fn reg_to_reg(&mut self, reg_src: Register, reg_dst: Register) -> u8 {
         *self.regf.reg_mut(reg_dst) = self.regf.reg(reg_src);
-        self.update_flags_nz(self.regf.reg(reg_dst));
+        let value = self.regf.reg(reg_dst);
+        self.update_flags_nz(value);
+
+        value
     }
 
     fn read_modify_write_mem<F>(
         &mut self,
         addr_mode: AddressMode,
         modify: F,
-    ) -> Result<(), RunError>
+    ) -> Result<u8, RunError>
     where
         F: Fn(u8) -> u8,
     {
         let ea = self.get_effective_address(addr_mode)?;
-        let data = self.read_u8(ea)?;
-        let data = modify(data);
-        self.write_u8(ea, data)?;
-        self.update_flags_nz(data);
+        let value = self.read_u8(ea)?;
+        let value = modify(value);
+        self.write_u8(ea, value)?;
+        self.update_flags_nz(value);
 
-        Ok(())
+        Ok(value)
     }
 
-    fn read_modify_write_reg<F>(&mut self, reg: Register, modify: F)
+    fn read_modify_write_reg<F>(&mut self, reg: Register, modify: F) -> u8
     where
         F: Fn(u8) -> u8,
     {
-        let data = self.regf.reg(reg);
-        let data = modify(data);
-        *self.regf.reg_mut(reg) = data;
-        self.update_flags_nz(data);
+        let value = self.regf.reg(reg);
+        let value = modify(value);
+        *self.regf.reg_mut(reg) = value;
+        self.update_flags_nz(value);
+
+        value
     }
 
     fn step(&mut self) -> Result<RunExit, RunError> {
@@ -339,10 +343,7 @@ where
             Insn::BMI(_addr_mode) => todo!("bmi"),
             Insn::BNE(_addr_mode) => todo!("bne"),
             Insn::BPL(_addr_mode) => todo!("bpl"),
-            Insn::BRK => {
-                todo!("brk");
-                return Ok(RunExit::Break);
-            }
+            Insn::BRK => todo!("brk"),
             Insn::BVC(_addr_mode) => todo!("bvc"),
             Insn::BVS(_addr_mode) => todo!("bvs"),
             Insn::CLC => self.regf.clear_flag(Status::Carry),
@@ -351,15 +352,23 @@ where
             Insn::CLV => self.regf.clear_flag(Status::Overflow),
             Insn::CPX(_addr_mode) => todo!("cpx"),
             Insn::CPY(_addr_mode) => todo!("cpy"),
-            Insn::DEY => self.read_modify_write_reg(Register::Y, |v| v.wrapping_sub(1)),
-            Insn::INX => self.read_modify_write_reg(Register::X, |v| v.wrapping_add(1)),
-            Insn::INY => self.read_modify_write_reg(Register::Y, |v| v.wrapping_add(1)),
+            Insn::DEY => {
+                self.read_modify_write_reg(Register::Y, |v| v.wrapping_sub(1));
+            }
+            Insn::INX => {
+                self.read_modify_write_reg(Register::X, |v| v.wrapping_add(1));
+            }
+            Insn::INY => {
+                self.read_modify_write_reg(Register::Y, |v| v.wrapping_add(1));
+            }
             Insn::JMP(addr_mode) => {
                 let pc_ptr = self.get_effective_address(addr_mode)?;
                 self.regf.set_pc(self.load_u16(pc_ptr)?);
             }
             Insn::JSR(_addr_mode) => todo!("jsr"),
-            Insn::LDY(addr_mode) => self.mem_to_reg(addr_mode, Register::Y)?,
+            Insn::LDY(addr_mode) => {
+                self.mem_to_reg(addr_mode, Register::Y)?;
+            }
             Insn::PHA => todo!("pha"),
             Insn::PHP => todo!("php"),
             Insn::PLA => todo!("pla"),
@@ -369,37 +378,55 @@ where
             Insn::SEC => self.regf.set_flag(Status::Carry),
             Insn::SED => self.regf.set_flag(Status::Decimal),
             Insn::SEI => self.regf.set_flag(Status::InterruptDisable),
-            Insn::STY(addr_mode) => self.reg_to_mem(Register::Y, addr_mode)?,
-            Insn::TAY => self.reg_to_reg(Register::A, Register::Y),
-            Insn::TYA => self.reg_to_reg(Register::Y, Register::A),
+            Insn::STY(addr_mode) => {
+                self.reg_to_mem(Register::Y, addr_mode)?;
+            }
+            Insn::TAY => {
+                self.reg_to_reg(Register::A, Register::Y);
+            }
+            Insn::TYA => {
+                self.reg_to_reg(Register::Y, Register::A);
+            }
             // Group 0b01. ALU instructions and load/store for the accumulator.
             // Very regular encoding to make decoding and execution for the common path
             // faster in hardware (presumably).
             Insn::ADC(_addr_mode) => todo!("adc"),
             Insn::AND(addr_mode) => {
                 let a = self.regf.a();
-                self.read_modify_to_reg(addr_mode, Register::A, |v| v & a)?
+                self.read_modify_to_reg(addr_mode, Register::A, |v| v & a)?;
             }
             Insn::CMP(_addr_mode) => todo!("cmp"),
             Insn::EOR(addr_mode) => {
                 let a = self.regf.a();
-                self.read_modify_to_reg(addr_mode, Register::A, |v| v ^ a)?
+                self.read_modify_to_reg(addr_mode, Register::A, |v| v ^ a)?;
             }
-            Insn::LDA(addr_mode) => self.mem_to_reg(addr_mode, Register::A)?,
+            Insn::LDA(addr_mode) => {
+                self.mem_to_reg(addr_mode, Register::A)?;
+            }
             Insn::ORA(addr_mode) => {
                 let a = self.regf.a();
-                self.read_modify_to_reg(addr_mode, Register::A, |v| v | a)?
+                self.read_modify_to_reg(addr_mode, Register::A, |v| v | a)?;
             }
             Insn::SBC(_addr_mode) => todo!("sbc"),
-            Insn::STA(addr_mode) => self.reg_to_mem(Register::A, addr_mode)?,
+            Insn::STA(addr_mode) => {
+                self.reg_to_mem(Register::A, addr_mode)?;
+            }
             // Group 0b10. Bit operation and accumulator operations,
             // less regular than the ALU group.
             Insn::ASLA => todo!("asl a"),
             Insn::ASL(_addr_mode) => todo!("asl"),
-            Insn::DEC(addr_mode) => self.read_modify_write_mem(addr_mode, |v| v.wrapping_sub(1))?,
-            Insn::DEX => self.read_modify_write_reg(Register::X, |v| v.wrapping_sub(1)),
-            Insn::INC(addr_mode) => self.read_modify_write_mem(addr_mode, |v| v.wrapping_add(1))?,
-            Insn::LDX(addr_mode) => self.mem_to_reg(addr_mode, Register::X)?,
+            Insn::DEC(addr_mode) => {
+                self.read_modify_write_mem(addr_mode, |v| v.wrapping_sub(1))?;
+            }
+            Insn::DEX => {
+                self.read_modify_write_reg(Register::X, |v| v.wrapping_sub(1));
+            }
+            Insn::INC(addr_mode) => {
+                self.read_modify_write_mem(addr_mode, |v| v.wrapping_add(1))?;
+            }
+            Insn::LDX(addr_mode) => {
+                self.mem_to_reg(addr_mode, Register::X)?;
+            }
             Insn::LSRA => todo!("lsr a"),
             Insn::LSR(_addr_mode) => todo!("lsr"),
             Insn::NOP => {}
@@ -407,11 +434,21 @@ where
             Insn::ROL(_addr_mode) => todo!("rol"),
             Insn::RORA => todo!("ror a"),
             Insn::ROR(_addr_mode) => todo!("ror"),
-            Insn::STX(addr_mode) => self.reg_to_mem(Register::X, addr_mode)?,
-            Insn::TAX => self.reg_to_reg(Register::A, Register::X),
-            Insn::TSX => self.reg_to_reg(Register::S, Register::X),
-            Insn::TXA => self.reg_to_reg(Register::X, Register::A),
-            Insn::TXS => self.reg_to_reg(Register::X, Register::S),
+            Insn::STX(addr_mode) => {
+                self.reg_to_mem(Register::X, addr_mode)?;
+            }
+            Insn::TAX => {
+                self.reg_to_reg(Register::A, Register::X);
+            }
+            Insn::TSX => {
+                self.reg_to_reg(Register::S, Register::X);
+            }
+            Insn::TXA => {
+                self.reg_to_reg(Register::X, Register::A);
+            }
+            Insn::TXS => {
+                self.reg_to_reg(Register::X, Register::S);
+            }
             // Group 0b11 contains invalid instructions
             Insn::JAM => {
                 return Err(RunError::InvalidInstruction(self.last_opcode));

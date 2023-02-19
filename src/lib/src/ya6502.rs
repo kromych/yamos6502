@@ -1,13 +1,16 @@
 //! Behavioral emulator of MOS 6502
 //!
-//! There is no cycle-accurate emulation, support
-//! for undocumented instructions and other microarch
-//! side effects such as writing the old value first
-//! for the read-modify-write instructions.
+//! There is no emulation of the microarch layer, e.g., no:
+//! * cycle-accurate emulation or cycle counting,
+//! * (unintended) support for "undocumented" instructions,
+//! * (unintended?) microarch side effects such as (not limited to):
+//!     * writing the old value first for the read-modify-write instructions,
+//!     * interrupt hijacking.
 //!
-//! Unsuported instructions result in the execution jam,
-//! and the processor rolls its state back to the previous
-//! instruction.
+//! Unsuported instructions result in the execution jam, and the processor
+//! will roll its state back to the previous instruction.
+//!
+//! Stack underflow and overflow results in a fault, too.
 
 use core::fmt::Debug;
 use core::sync::atomic::AtomicBool;
@@ -34,19 +37,19 @@ pub trait Memory {
     fn read(&self, addr: u16) -> Result<u8, MemoryError>;
 }
 
-/// When an interrupt is signaled, the low and the high
-/// 8 bits of the program counter are loaded
-/// from these addresses.
-pub const IRQ_VECTOR: u16 = 0xFFFE;
+/// When an interrupt is signaled (hardware or the software via BRK),
+/// the low and the high 8 bits of the program counter are loaded
+/// from a word at this address.
+pub const IRQ_BRK_VECTOR: u16 = 0xFFFE;
 
 /// When a reset is requested, the low and the high
 /// 8 bits of the program counter are loaded
-/// from these addresses.
+/// from a word at this address.
 pub const RESET_VECTOR: u16 = 0xFFFC;
 
 /// When an non-maskable interrupt is signaled,
 /// the low and the high 8 bits of the program counter
-/// are loaded from these addresses.
+/// from a word at this address.
 pub const NMI_VECTOR: u16 = 0xFFFA;
 
 /// Bottom of the stack
@@ -56,7 +59,7 @@ pub const STACK_BOTTOM: u16 = 0x0100;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunExit {
     /// Instruction retired
-    InstructionExecuted(Insn),
+    Executed(Insn),
     /// Interrupt
     Interrupt,
     /// Non-maskable interrupt
@@ -264,7 +267,7 @@ where
         addr_mode: AddressMode,
         reg: Register,
         modify: F,
-    ) -> Result<u8, RunError>
+    ) -> Result<(), RunError>
     where
         F: Fn(u8) -> u8,
     {
@@ -274,30 +277,30 @@ where
         *self.reg_file.reg_mut(reg) = value;
         self.update_flags_nz(value);
 
-        Ok(value)
+        Ok(())
     }
 
     #[inline]
-    fn mem_to_reg(&mut self, addr_mode: AddressMode, reg: Register) -> Result<u8, RunError> {
-        self.read_modify_to_reg(addr_mode, reg, |v| v)
+    fn mem_to_reg(&mut self, addr_mode: AddressMode, reg: Register) -> Result<(), RunError> {
+        self.read_modify_to_reg(addr_mode, reg, |v| v)?;
+
+        Ok(())
     }
 
     #[inline]
-    fn reg_to_mem(&mut self, reg: Register, addr_mode: AddressMode) -> Result<u8, RunError> {
+    fn reg_to_mem(&mut self, reg: Register, addr_mode: AddressMode) -> Result<(), RunError> {
         let ea = self.get_effective_address(addr_mode)?;
         let value = self.reg_file.reg(reg);
         self.write_u8(ea, value)?;
 
-        Ok(value)
+        Ok(())
     }
 
     #[inline]
-    fn reg_to_reg(&mut self, reg_src: Register, reg_dst: Register) -> u8 {
+    fn reg_to_reg(&mut self, reg_src: Register, reg_dst: Register) {
         *self.reg_file.reg_mut(reg_dst) = self.reg_file.reg(reg_src);
         let value = self.reg_file.reg(reg_dst);
         self.update_flags_nz(value);
-
-        value
     }
 
     #[inline]
@@ -305,7 +308,7 @@ where
         &mut self,
         addr_mode: AddressMode,
         modify: F,
-    ) -> Result<u8, RunError>
+    ) -> Result<(), RunError>
     where
         F: Fn(u8) -> u8,
     {
@@ -315,11 +318,11 @@ where
         self.write_u8(ea, value)?;
         self.update_flags_nz(value);
 
-        Ok(value)
+        Ok(())
     }
 
     #[inline]
-    fn read_modify_write_reg<F>(&mut self, reg: Register, modify: F) -> u8
+    fn read_modify_write_reg<F>(&mut self, reg: Register, modify: F)
     where
         F: Fn(u8) -> u8,
     {
@@ -327,8 +330,6 @@ where
         let value = modify(value);
         *self.reg_file.reg_mut(reg) = value;
         self.update_flags_nz(value);
-
-        value
     }
 
     #[inline]
@@ -409,7 +410,17 @@ where
         match insn {
             // Group 0b00. Flags, conditionals, jumps, misc. There are a few
             // quite complex instructions here.
-            Insn::BRK => todo!("brk"),
+            Insn::BRK => {
+                // Skip the break mark
+                self.reg_file.adjust_pc_by(1);
+                // Push the PC
+                self.stack_push_u16(self.reg_file.pc())?;
+                // Push the status register adjusted for the occasion
+                let p = self.reg_file.reg(Register::P);
+                self.stack_push_u8(p | Status::Break.mask() | Status::AlwaysSet.mask())?;
+                // Disable interrupts
+                self.reg_file.set_flag(Status::InterruptDisable);
+            }
             Insn::BCC(addr_mode) => self.branch(addr_mode, !self.flag_set(Status::Carry))?,
             Insn::BCS(addr_mode) => self.branch(addr_mode, self.flag_set(Status::Carry))?,
             Insn::BNE(addr_mode) => self.branch(addr_mode, !self.flag_set(Status::Zero))?,
@@ -425,41 +436,59 @@ where
             Insn::CLV => self.reg_file.clear_flag(Status::Overflow),
             Insn::CPX(_addr_mode) => todo!("cpx"),
             Insn::CPY(_addr_mode) => todo!("cpy"),
-            Insn::DEY => {
-                self.read_modify_write_reg(Register::Y, |v| v.wrapping_sub(1));
-            }
-            Insn::INX => {
-                self.read_modify_write_reg(Register::X, |v| v.wrapping_add(1));
-            }
-            Insn::INY => {
-                self.read_modify_write_reg(Register::Y, |v| v.wrapping_add(1));
-            }
+            Insn::DEY => self.read_modify_write_reg(Register::Y, |v| v.wrapping_sub(1)),
+            Insn::INX => self.read_modify_write_reg(Register::X, |v| v.wrapping_add(1)),
+            Insn::INY => self.read_modify_write_reg(Register::Y, |v| v.wrapping_add(1)),
             Insn::JMP(addr_mode) => {
                 let pc_ptr = self.get_effective_address(addr_mode)?;
                 self.reg_file.set_pc(self.read_u16(pc_ptr)?);
             }
-            Insn::JSR(_addr_mode) => todo!("jsr"),
-            Insn::LDY(addr_mode) => {
-                self.mem_to_reg(addr_mode, Register::Y)?;
+            Insn::JSR(addr_mode) => {
+                // Get the new PC location (which also skips the JSR instruction bytes)
+                let pc_ptr = self.get_effective_address(addr_mode)?;
+                // Now the PC is right after the JSR operation along with its operand.
+                // This PC will be the return address for RTS, push it to the stack
+                self.stack_push_u16(self.reg_file.pc())?;
+                // Jump to the subroutine
+                self.reg_file.set_pc(self.read_u16(pc_ptr)?);
             }
-            Insn::PHA => todo!("pha"),
-            Insn::PHP => todo!("php"),
-            Insn::PLA => todo!("pla"),
-            Insn::PLP => todo!("plp"),
-            Insn::RTI => todo!("rti"),
-            Insn::RTS => todo!("rts"),
+            Insn::LDY(addr_mode) => self.mem_to_reg(addr_mode, Register::Y)?,
+            Insn::PHA => self.stack_push_u8(self.reg_file.a())?,
+            Insn::PHP => {
+                let p = self.reg_file.reg(Register::P);
+                self.stack_push_u8(p | Status::Break.mask() | Status::AlwaysSet.mask())?;
+            }
+            Insn::PLA => {
+                let value = self.stack_pull_u8()?;
+                *self.reg_file.a_mut() = value;
+                self.update_flags_nz(value);
+            }
+            Insn::PLP => {
+                let value = self.stack_pull_u8()?;
+                *self.reg_file.reg_mut(Register::P) = value;
+                self.reg_file.clear_flag(Status::Break);
+                self.reg_file.set_flag(Status::AlwaysSet);
+            }
+            Insn::RTI => {
+                let value = self.stack_pull_u8()?;
+                *self.reg_file.reg_mut(Register::P) = value;
+                self.reg_file.clear_flag(Status::Break);
+                self.reg_file.set_flag(Status::AlwaysSet);
+
+                let pc = self.stack_pull_u16()?;
+                self.reg_file.set_pc(pc);
+            }
+            Insn::RTS => {
+                let pc = self.stack_pull_u16()?;
+                self.reg_file.set_pc(pc);
+            }
             Insn::SEC => self.reg_file.set_flag(Status::Carry),
             Insn::SED => self.reg_file.set_flag(Status::Decimal),
             Insn::SEI => self.reg_file.set_flag(Status::InterruptDisable),
-            Insn::STY(addr_mode) => {
-                self.reg_to_mem(Register::Y, addr_mode)?;
-            }
-            Insn::TAY => {
-                self.reg_to_reg(Register::A, Register::Y);
-            }
-            Insn::TYA => {
-                self.reg_to_reg(Register::Y, Register::A);
-            }
+            Insn::STY(addr_mode) => self.reg_to_mem(Register::Y, addr_mode)?,
+            Insn::TAY => self.reg_to_reg(Register::A, Register::Y),
+            Insn::TYA => self.reg_to_reg(Register::Y, Register::A),
+
             // Group 0b01. ALU instructions and load/store for the accumulator.
             // Very regular encoding to make decoding and execution for the common path
             // faster in hardware (presumably).
@@ -473,33 +502,22 @@ where
                 let a = self.reg_file.a();
                 self.read_modify_to_reg(addr_mode, Register::A, |v| v ^ a)?;
             }
-            Insn::LDA(addr_mode) => {
-                self.mem_to_reg(addr_mode, Register::A)?;
-            }
+            Insn::LDA(addr_mode) => self.mem_to_reg(addr_mode, Register::A)?,
             Insn::ORA(addr_mode) => {
                 let a = self.reg_file.a();
                 self.read_modify_to_reg(addr_mode, Register::A, |v| v | a)?;
             }
             Insn::SBC(_addr_mode) => todo!("sbc"),
-            Insn::STA(addr_mode) => {
-                self.reg_to_mem(Register::A, addr_mode)?;
-            }
+            Insn::STA(addr_mode) => self.reg_to_mem(Register::A, addr_mode)?,
+
             // Group 0b10. Bit operation and accumulator operations,
             // less regular than the ALU group.
             Insn::ASLA => todo!("asl a"),
             Insn::ASL(_addr_mode) => todo!("asl"),
-            Insn::DEC(addr_mode) => {
-                self.read_modify_write_mem(addr_mode, |v| v.wrapping_sub(1))?;
-            }
-            Insn::DEX => {
-                self.read_modify_write_reg(Register::X, |v| v.wrapping_sub(1));
-            }
-            Insn::INC(addr_mode) => {
-                self.read_modify_write_mem(addr_mode, |v| v.wrapping_add(1))?;
-            }
-            Insn::LDX(addr_mode) => {
-                self.mem_to_reg(addr_mode, Register::X)?;
-            }
+            Insn::DEC(addr_mode) => self.read_modify_write_mem(addr_mode, |v| v.wrapping_sub(1))?,
+            Insn::DEX => self.read_modify_write_reg(Register::X, |v| v.wrapping_sub(1)),
+            Insn::INC(addr_mode) => self.read_modify_write_mem(addr_mode, |v| v.wrapping_add(1))?,
+            Insn::LDX(addr_mode) => self.mem_to_reg(addr_mode, Register::X)?,
             Insn::LSRA => todo!("lsr a"),
             Insn::LSR(_addr_mode) => todo!("lsr"),
             Insn::NOP => {}
@@ -507,28 +525,19 @@ where
             Insn::ROL(_addr_mode) => todo!("rol"),
             Insn::RORA => todo!("ror a"),
             Insn::ROR(_addr_mode) => todo!("ror"),
-            Insn::STX(addr_mode) => {
-                self.reg_to_mem(Register::X, addr_mode)?;
-            }
-            Insn::TAX => {
-                self.reg_to_reg(Register::A, Register::X);
-            }
-            Insn::TSX => {
-                self.reg_to_reg(Register::S, Register::X);
-            }
-            Insn::TXA => {
-                self.reg_to_reg(Register::X, Register::A);
-            }
-            Insn::TXS => {
-                self.reg_to_reg(Register::X, Register::S);
-            }
+            Insn::STX(addr_mode) => self.reg_to_mem(Register::X, addr_mode)?,
+            Insn::TAX => self.reg_to_reg(Register::A, Register::X),
+            Insn::TSX => self.reg_to_reg(Register::S, Register::X),
+            Insn::TXA => self.reg_to_reg(Register::X, Register::A),
+            Insn::TXS => self.reg_to_reg(Register::X, Register::S),
+
             // Group 0b11 contains invalid instructions
             Insn::JAM => {
                 return Err(RunError::InvalidInstruction(self.last_opcode));
             }
         };
 
-        Ok(RunExit::InstructionExecuted(insn))
+        Ok(RunExit::Executed(insn))
     }
 
     pub fn run(&mut self) -> Result<RunExit, RunError> {
@@ -549,13 +558,25 @@ where
         // Handle other events.
         // The real processor can't/won't deaasert these lines.
         if self.nmi_pending.load(Ordering::Acquire) {
+            self.reg_file.set_flag(Status::InterruptDisable);
+            self.stack_push_u16(self.reg_file.pc())?;
+
+            let p = self.reg_file.reg(Register::P);
+            self.stack_push_u8(p & !Status::Break.mask() | Status::AlwaysSet.mask())?;
+
             self.reg_file.set_pc(self.read_u16(NMI_VECTOR)?);
             self.nmi_pending.store(false, Ordering::Release);
 
             return Ok(RunExit::NonMaskableInterrupt);
         }
         if !self.flag_set(Status::InterruptDisable) && self.irq_pending.load(Ordering::Acquire) {
-            self.reg_file.set_pc(self.read_u16(IRQ_VECTOR)?);
+            self.reg_file.set_flag(Status::InterruptDisable);
+            self.stack_push_u16(self.reg_file.pc())?;
+
+            let p = self.reg_file.reg(Register::P);
+            self.stack_push_u8(p & !Status::Break.mask() | Status::AlwaysSet.mask())?;
+
+            self.reg_file.set_pc(self.read_u16(IRQ_BRK_VECTOR)?);
             self.irq_pending.store(false, Ordering::Release);
 
             return Ok(RunExit::Interrupt);

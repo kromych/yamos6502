@@ -14,7 +14,7 @@ pub enum Status {
     /// V	Overflow
     Overflow = 6,
     /// -   Ignored (in the register, hardwired to the logic `1`)
-    _IgnoredAlwaysOne = 5,
+    AlwaysSet = 5,
     /// B	Break (is never set in the register,
     ///            only in the register value pushed on the stack which
     ///            happens when executing BRK)
@@ -72,7 +72,7 @@ impl RegisterFile {
         // Hardware sets few flags, everything else is initialized
         // by software.
         self.set_flag_from_cond(Status::InterruptDisable, true);
-        self.set_flag_from_cond(Status::_IgnoredAlwaysOne, true);
+        self.set_flag_from_cond(Status::AlwaysSet, true);
         self.set_flag_from_cond(Status::Decimal, false);
 
         // Stack pointer is not set! In some configurations that might

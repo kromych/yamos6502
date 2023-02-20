@@ -69,6 +69,9 @@ struct Args {
     /// Pause in milliseconds between executing instructions
     #[arg(long)]
     pause_millis: Option<u64>,
+    /// Dead loop iterations before exit
+    #[clap(long, default_value_t = 0x10000, value_parser=maybe_hex::<u64>)]
+    dead_loop_iterations: u64,
     /// Logging level
     #[clap(long, default_value = "info")]
     log: LogLevel,
@@ -177,6 +180,8 @@ fn main() -> anyhow::Result<()> {
     mos6502.set_reset_pending();
 
     let mut instructions_emulated = 0;
+    let mut prev_pc = !args.reset_pc;
+    let mut dead_loop_iterations = 0;
     loop {
         let run = mos6502.run();
         match run {
@@ -201,6 +206,18 @@ fn main() -> anyhow::Result<()> {
 
         if let Some(millis) = args.pause_millis {
             std::thread::sleep(std::time::Duration::from_millis(millis));
+        }
+
+        if prev_pc == mos6502.registers().pc() {
+            dead_loop_iterations += 1;
+        } else {
+            prev_pc = mos6502.registers().pc();
+            dead_loop_iterations = 0;
+        }
+        if dead_loop_iterations > args.dead_loop_iterations {
+            anyhow::bail!(
+                "the code has been in a dead loop for {dead_loop_iterations} iterations, aborting"
+            );
         }
     }
 }

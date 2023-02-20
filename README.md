@@ -68,6 +68,9 @@ Options:
           [default: 0]
       --pause-millis <PAUSE_MILLIS>
           Pause in milliseconds between executing instructions
+      --dead-loop-iterations <DEAD_LOOP_ITERATIONS>
+          Dead loop iterations before exit          
+          [default: 65536]          
       --log <LOG>
           Logging level          
           [default: info]
@@ -87,11 +90,12 @@ To run the 6502 functional tests and print staticstics every 26_000_000 instruct
 # 
 # `git clone https://github.com/Klaus2m5/6502_65C02_functional_tests ../6502_65C02_functional_tests
 #
-cargo run --release \
+ cargo run --release \
     ../6502_65C02_functional_tests/bin_files/6502_functional_test.bin \
-    --print-stats 26000000 \
+    --print-stats 1000000 \
     --reset-pc 0x400 \
-    --stack-wraparound
+    --stack-wraparound \
+    --dead-loop-iterations 16
 ```
 
 ## The 6502-related resources and projects I have found inspiration in

@@ -137,7 +137,7 @@ fn test_loads() {
     memory.write(TEST_START, &program);
 
     let mut mos6502 = Mos6502::new(&mut memory);
-    mos6502.reset();
+    mos6502.set_reset_pending();
 
     assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::LDA(AddressMode::Immediate)));
     assert!(!mos6502.registers().flag_set(Status::Zero));

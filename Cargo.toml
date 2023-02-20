@@ -10,7 +10,8 @@ path = "src/bin/main.rs"
 [dependencies]
 yamos6502 = { path = "src/lib"}
 
-clap = { version = "4.1", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
+clap-num = "1"
 env_logger = "0.10"
 log = "0.4"
 anyhow = "1"

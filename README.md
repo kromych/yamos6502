@@ -3,9 +3,11 @@
 ## What is this?
 
 This emulator is geared towards an easy integration with the `no_std` Rust projects.
-That said, it should be very easy to use in the `std` projects, too. A great emphasis
-has been put on the clean implementation. In few places some bit twiddling is used
-to make the code branchless and hopefully even more performant.
+That said, it should be very easy to use in the `std` projects, too, as demonstrated
+by the examples below.
+
+A great emphasis has been put on the clean implementation. Some bit twiddling has been
+employed in few places to make the code branchless and hopefully even more performant.
 
 It comes with some unit-tests tests (work in progress), and most notably, the emulator
 passes the [6502 functional tests](https://github.com/Klaus2m5/6502_65C02_functional_tests).
@@ -49,23 +51,43 @@ too :)
 Usage: yamos6502e [OPTIONS] <MEM_FILE_LIST>
 
 Arguments:
-  <MEM_FILE_LIST>  Paths to the files to seed the memory with. Format is (path[:load_addr_hex_no_0x],)+, load addresses must increase
+  <MEM_FILE_LIST>
+          Paths to the files to seed the memory with.
+          Format is (path[:load_addr_hex_no_0x],)+, load addresses must increase, and the loaded files must not overlap.
 
 Options:
-      --rom-start <ROM_START>        ROM start. Writes into ROM will cause an error [default: 65535]
-      --reset-pc <RESET_PC>          Initial program counter [default: 1024]
-      --stack-wraparound             Allow stack wraparound
-      --print-stats <PRINT_STATS>    Print statistics after execution every `print_stats` instructions [default: 0]
-      --pause-millis <PAUSE_MILLIS>  Pause in milliseconds between executing instructions
-  -h, --help                         Print help
-  -V, --version                      Print version
-```
+      --rom-start <ROM_START>
+          ROM start. Writes into ROM will cause an error.
+          [default: 65535]
+      --reset-pc <RESET_PC>
+          Initial program counter
+          [default: 1024]
+      --stack-wraparound
+          Allow stack wraparound
+      --print-stats <PRINT_STATS>
+          Print statistics after execution every `print_stats` instructions
+          [default: 0]
+      --pause-millis <PAUSE_MILLIS>
+          Pause in milliseconds between executing instructions
+      --log <LOG>
+          Logging level          
+          [default: info]
+          [possible values: info, debug, trace]
 
-To run the 6502 functional tests and print staticstics every 1200000 instructions:
+  -h, --help
+          Print help (see a summary with '-h')
+  -V, --version
+          Print version```
+
+To run the 6502 functional tests and print staticstics every 26_000_000 instructions:
 
 ```sh
 # Assuming https://github.com/Klaus2m5/6502_65C02_functional_tests is cloned one directory above
-cargo run --release ../6502_65C02_functional_tests/bin_files/6502_functional_test.bin --print-stats 1200000
+cargo run --release \
+    ../6502_65C02_functional_tests/bin_files/6502_functional_test.bin \
+    --print-stats 26000000 \
+    --reset-pc 0x400 \
+    --stack-wraparound
 ```
 
 ## The 6502-related resources and projects I have found inspiration in

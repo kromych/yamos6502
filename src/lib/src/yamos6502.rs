@@ -10,7 +10,7 @@
 //! Unsuported instructions result in the execution jam, and the processor
 //! will roll its state back to the previous instruction.
 //!
-//! Stack underflow and overflow results in a fault, too.
+//! Stack underflow and overflow results in a fault, too, if configured.
 
 use core::fmt::Debug;
 use core::sync::atomic::AtomicBool;

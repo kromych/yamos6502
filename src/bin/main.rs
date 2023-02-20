@@ -1,23 +1,67 @@
+use clap::builder::PossibleValue;
 use clap::Parser;
+use clap::ValueEnum;
+use clap_num::maybe_hex;
+
 use yamos6502::Memory;
+use yamos6502::RunExit;
 use yamos6502::StackWraparound;
 use yamos6502::MAX_MEMORY_SIZE;
 use yamos6502::RESET_VECTOR;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LogLevel {
+    Info,
+    Debug,
+    Trace,
+}
+
+impl LogLevel {
+    fn to_str(self) -> &'static str {
+        match self {
+            Self::Trace => "trace",
+            Self::Debug => "debug",
+            Self::Info => "info",
+        }
+    }
+}
+
+impl std::fmt::Display for LogLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{self:?}"))
+    }
+}
+
+impl ValueEnum for LogLevel {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[LogLevel::Info, LogLevel::Debug, LogLevel::Trace]
+    }
+
+    fn to_possible_value(&self) -> Option<PossibleValue> {
+        match self {
+            LogLevel::Info => Some(PossibleValue::new("info")),
+            LogLevel::Debug => Some(PossibleValue::new("debug")),
+            LogLevel::Trace => Some(PossibleValue::new("trace")),
+        }
+    }
+}
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Paths to the files to seed the memory with.
-    /// Format (path[:load_addr],)+, load addresses must increase.
+    ///
+    /// Format is (path[:load_addr_hex_no_0x],)+, load addresses must increase,
+    /// and the loaded files must not overlap.
     mem_file_list: String,
-    /// Optional ROM start. Writes into ROM will cause an error.
-    #[arg(long, default_value_t = 0xffff)]
+    /// ROM start. Writes into ROM will cause an error.
+    #[arg(long, default_value_t = 0xffff, value_parser=maybe_hex::<u16>)]
     rom_start: u16,
     /// Initial program counter.
-    #[arg(long, default_value_t = 0x400)]
+    #[arg(long, default_value_t = 0x400, value_parser=maybe_hex::<u16>)]
     reset_pc: u16,
     /// Allow stack wraparound.
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value_t = false)]
     stack_wraparound: bool,
     /// Print statistics after execution every `print_stats` instructions.
     #[arg(long, default_value_t = 0)]
@@ -25,6 +69,9 @@ struct Args {
     /// Pause in milliseconds between executing instructions
     #[arg(long)]
     pause_millis: Option<u64>,
+    /// Logging level
+    #[clap(long, default_value = "info")]
+    log: LogLevel,
 }
 
 struct RomRam {
@@ -67,9 +114,8 @@ impl Memory for RomRam {
 }
 
 fn main() -> anyhow::Result<()> {
-    init_logger();
-
     let args = Args::parse();
+    init_logger(args.log);
 
     let mut memory = vec![];
     for file_path_addr in args.mem_file_list.split(',') {
@@ -85,14 +131,17 @@ fn main() -> anyhow::Result<()> {
         log::info!("Read 0x{:04x} bytes", chunk.len());
 
         if let Some(addr) = file_path_addr.next() {
-            if let Ok(addr) = str::parse::<u16>(addr) {
+            if let Ok(addr) = u16::from_str_radix(addr, 16) {
                 if memory.len() > addr as usize {
                     anyhow::bail!("Load addresses must increase");
                 }
                 // Fill the gap
                 memory.extend_from_slice(&vec![0; addr as usize - memory.len()]);
             } else {
-                anyhow::bail!("Unexpected format of the load address in the memory file list");
+                anyhow::bail!(
+                    "Load address {} isn't an unadorned 16-bit hex number (0000-ffff)",
+                    addr
+                );
             }
         }
         log::info!("Loading at 0x{:04x}", memory.len());
@@ -131,14 +180,18 @@ fn main() -> anyhow::Result<()> {
     loop {
         let run = mos6502.run();
         match run {
-            Ok(exit) => {
-                log::debug!("{:04x?} {:04x?}", exit, mos6502.registers());
+            Ok(RunExit::Executed(insn)) => {
+                log::debug!("{insn:?}, {:04x?}", mos6502.registers());
                 instructions_emulated += 1;
 
                 if args.print_stats != 0 && instructions_emulated % args.print_stats == 0 {
                     log::info!("Instructions emulated: {instructions_emulated}");
-                    log::info!("Last one: {:04x?} {:04x?}", exit, mos6502.registers());
+                    log::info!("Last one: {insn:?}, {:04x?}", mos6502.registers());
                 }
+            }
+            Ok(RunExit::Interrupt) => log::debug!("Interrupt {:04x?}", mos6502.registers()),
+            Ok(RunExit::NonMaskableInterrupt) => {
+                log::debug!("Non-maskable interrupt {:04x?}", mos6502.registers())
             }
             Err(exit) => {
                 log::error!("{:04x?} {:04x?}", exit, mos6502.registers());
@@ -152,6 +205,8 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
-fn init_logger() {
-    env_logger::init_from_env(env_logger::Env::default().filter_or("YAMOS6502_LEVEL", "info"));
+fn init_logger(log_level: LogLevel) {
+    env_logger::init_from_env(
+        env_logger::Env::default().filter_or("YAMOS6502_LEVEL", log_level.to_str()),
+    );
 }

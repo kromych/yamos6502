@@ -266,10 +266,10 @@ where
         &mut self,
         addr_mode: AddressMode,
         reg: Register,
-        modify: F,
+        mut modify: F,
     ) -> Result<(), RunError>
     where
-        F: Fn(u8) -> u8,
+        F: FnMut(u8) -> u8,
     {
         let ea = self.get_effective_address(addr_mode)?;
         let value = self.read_u8(ea)?;
@@ -408,6 +408,75 @@ where
         Ok(())
     }
 
+    #[inline]
+    fn adc(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
+        if self.flag_set(Status::Decimal) {
+            todo!("Decimal mode is not supported for adc just yet");
+        }
+
+        let carry_in = self.flag_set(Status::Carry) as u16;
+        let mut carry_out = false;
+        let mut overflow = false;
+
+        let a = self.reg_file.a();
+        self.read_modify_to_reg(addr_mode, Register::A, |v| {
+            let r = v as u16 + a as u16 + carry_in;
+            carry_out = r & 0xff00 != 0;
+
+            // Signed overflow happens if the sign of the operands is different
+            // from sign of the result, and either the sum of two positive numbers
+            // can't be represented as a positive number or the sum of the negative
+            // numbers can't be represented as a negative number. Refer to
+            // https://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
+            // for the in depth explanation.
+            overflow = ((a as u16) ^ r) & ((v as u16) ^ r) & 0x0080 != 0;
+
+            r as u8
+        })?;
+
+        self.reg_file.set_flag_from_cond(Status::Carry, carry_out);
+        self.reg_file.set_flag_from_cond(Status::Overflow, overflow);
+
+        Ok(())
+    }
+
+    #[inline]
+    fn sbc(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
+        if self.flag_set(Status::Decimal) {
+            todo!("Decimal mode is not supported for sbc just yet");
+        }
+
+        // In the hardware, `sbc operand` is `adc ~operand` (or 255-operand, i.e.
+        // 1-compliment).
+
+        // There is no explicit borrow flag,
+        // instead the complement of the carry flag is used.
+        let borrow_in = !self.flag_set(Status::Carry) as i16;
+        let mut borrow_out = false;
+        let mut overflow = false;
+
+        let a = self.reg_file.a();
+        self.read_modify_to_reg(addr_mode, Register::A, |v| {
+            let r = a as i16 - v as i16 - borrow_in;
+            borrow_out = (r as u16) & 0xff00 != 0;
+
+            // Signed overflow happens if the sign of the operands is different
+            // from sign of the result, and either the sum of two positive numbers
+            // can't be represented as a positive number or the sum of the negative
+            // numbers can't be represented as a negative number. Refer to
+            // https://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
+            // for the in depth explanation.
+            overflow = ((a as u16) ^ (r as u16)) & (((!v) as u16) ^ (r as u16)) & 0x0080 != 0;
+
+            r as u8
+        })?;
+
+        self.reg_file.set_flag_from_cond(Status::Carry, !borrow_out);
+        self.reg_file.set_flag_from_cond(Status::Overflow, overflow);
+
+        Ok(())
+    }
+
     fn step(&mut self) -> Result<RunExit, RunError> {
         // Fetch instruction
         self.last_opcode = self
@@ -505,7 +574,7 @@ where
             // Group 0b01. ALU instructions and load/store for the accumulator.
             // Very regular encoding to make decoding and execution for the common path
             // faster in hardware (presumably).
-            Insn::ADC(_addr_mode) => todo!("adc"),
+            Insn::ADC(addr_mode) => self.adc(addr_mode)?,
             Insn::AND(addr_mode) => {
                 let a = self.reg_file.a();
                 self.read_modify_to_reg(addr_mode, Register::A, |v| v & a)?;
@@ -520,7 +589,7 @@ where
                 let a = self.reg_file.a();
                 self.read_modify_to_reg(addr_mode, Register::A, |v| v | a)?;
             }
-            Insn::SBC(_addr_mode) => todo!("sbc"),
+            Insn::SBC(addr_mode) => self.sbc(addr_mode)?,
             Insn::STA(addr_mode) => self.reg_to_mem(Register::A, addr_mode)?,
 
             // Group 0b10. Bit operation and accumulator operations,

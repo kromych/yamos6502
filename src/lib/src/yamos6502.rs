@@ -602,7 +602,8 @@ where
             Insn::TAX => self.reg_to_reg(Register::A, Register::X),
             Insn::TSX => self.reg_to_reg(Register::S, Register::X),
             Insn::TXA => self.reg_to_reg(Register::X, Register::A),
-            Insn::TXS => self.reg_to_reg(Register::X, Register::S),
+            // Note: TXS does not update flags!
+            Insn::TXS => *self.reg_file.sp_mut() = self.reg_file.x(),
 
             // Group 0b11 contains invalid instructions
             Insn::JAM => {

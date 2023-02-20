@@ -623,7 +623,7 @@ where
                     carry = v >> 7 != 0;
                     v.wrapping_shl(1)
                 });
-                self.reg_file.set_flag_from_cond(Status::Carry, carry)
+                self.reg_file.set_flag_from_cond(Status::Carry, carry);
             }
             Insn::ASL(addr_mode) => {
                 let mut carry = false;
@@ -631,14 +631,28 @@ where
                     carry = v >> 7 != 0;
                     v.wrapping_shl(1)
                 })?;
-                self.reg_file.set_flag_from_cond(Status::Carry, carry)
+                self.reg_file.set_flag_from_cond(Status::Carry, carry);
             }
             Insn::DEC(addr_mode) => self.read_modify_write_mem(addr_mode, |v| v.wrapping_sub(1))?,
             Insn::DEX => self.read_modify_write_reg(Register::X, |v| v.wrapping_sub(1)),
             Insn::INC(addr_mode) => self.read_modify_write_mem(addr_mode, |v| v.wrapping_add(1))?,
             Insn::LDX(addr_mode) => self.mem_to_reg(addr_mode, Register::X)?,
-            Insn::LSRA => todo!("lsr a"),
-            Insn::LSR(_addr_mode) => todo!("lsr"),
+            Insn::LSRA => {
+                let mut carry = false;
+                self.read_modify_write_reg(Register::A, |v| {
+                    carry = v & 1 != 0;
+                    v.wrapping_shr(1)
+                });
+                self.reg_file.set_flag_from_cond(Status::Carry, carry);
+            }
+            Insn::LSR(addr_mode) => {
+                let mut carry = false;
+                self.read_modify_write_mem(addr_mode, |v| {
+                    carry = v & 1 != 0;
+                    v.wrapping_shr(1)
+                })?;
+                self.reg_file.set_flag_from_cond(Status::Carry, carry);
+            }
             Insn::NOP => {}
             Insn::ROLA => todo!("rol a"),
             Insn::ROL(_addr_mode) => todo!("rol"),

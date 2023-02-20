@@ -19,6 +19,9 @@ struct Args {
     /// Allow stack wraparound.
     #[arg(long, default_value_t = true)]
     stack_wraparound: bool,
+    /// Print statistics after execution every `print_stats` instructions.
+    #[arg(long, default_value_t = 0)]
+    print_stats: u64,
     /// Pause in milliseconds between executing instructions
     #[arg(long)]
     pause_millis: Option<u64>,
@@ -46,7 +49,7 @@ impl Memory for RomRam {
         }
 
         self.cells[addr as usize] = value;
-        log::info!("Wrote 0x{:02x} to 0x{:04x}", value, addr);
+        log::trace!("Wrote 0x{:02x} to 0x{:04x}", value, addr);
 
         Ok(())
     }
@@ -57,7 +60,7 @@ impl Memory for RomRam {
         }
 
         let value = self.cells[addr as usize];
-        log::info!("Read 0x{:02x} from 0x{:04x}", value, addr);
+        log::trace!("Read 0x{:02x} from 0x{:04x}", value, addr);
 
         Ok(value)
     }
@@ -120,12 +123,23 @@ fn main() -> anyhow::Result<()> {
     let mut memory = RomRam::new(memory, args.rom_start);
     let mut mos6502 = yamos6502::Mos6502::new(&mut memory, allow_stack_wraparound);
 
+    log::info!("Running emulator");
+
     mos6502.set_reset_pending();
 
+    let mut instructions_emulated = 0;
     loop {
         let run = mos6502.run();
         match run {
-            Ok(exit) => log::info!("{:04x?} {:04x?}", exit, mos6502.registers()),
+            Ok(exit) => {
+                log::debug!("{:04x?} {:04x?}", exit, mos6502.registers());
+                instructions_emulated += 1;
+
+                if args.print_stats != 0 && instructions_emulated % args.print_stats == 0 {
+                    log::info!("Instructions emulated: {instructions_emulated}");
+                    log::info!("Last one: {:04x?} {:04x?}", exit, mos6502.registers());
+                }
+            }
             Err(exit) => {
                 log::error!("{:04x?} {:04x?}", exit, mos6502.registers());
                 anyhow::bail!("run error");

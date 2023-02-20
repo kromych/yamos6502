@@ -2,19 +2,18 @@
 
 ## What is this?
 
-This emulator is geared towards an easy integration with the `no_std` Rust projects.
-That said, it should be very easy to use in the `std` projects, too, as demonstrated
-by the examples below.
+This emulator is geared towards an easy integration with the `no_std` Rust projects
+to run in the environment where is no OS. That said, it should be very easy to use
+in the `std` projects, too, as demonstrated by the examples below. A great emphasis
+has been put on the clean implementation. Some bit twiddling has been employed in
+few places to make the code branchless and hopefully even more performant.
 
-A great emphasis has been put on the clean implementation. Some bit twiddling has been
-employed in few places to make the code branchless and hopefully even more performant.
+The emulator comes with some unit-tests tests (work in progress), and most notably,
+it passes the [6502 functional tests](https://github.com/Klaus2m5/6502_65C02_functional_tests).
 
-It comes with some unit-tests tests (work in progress), and most notably, the emulator
-passes the [6502 functional tests](https://github.com/Klaus2m5/6502_65C02_functional_tests).
-
-This emulator performs computation to the letter of the specification which is stricter
-than the real hardware and 6502 netlist-based emulators such as
-[Perfect 6502](https://github.com/mist64/perfect6502). In short, this is not a hardware
+This emulator strives to perform computation to the letter of the specification which
+is stricter than the real hardware and 6502 netlist-based emulators such as
+[Perfect 6502](https://github.com/mist64/perfect6502) do. In short, this is not a hardware
 simulator.
 
 The emulation algorithm is quite simple:
@@ -77,12 +76,17 @@ Options:
   -h, --help
           Print help (see a summary with '-h')
   -V, --version
-          Print version```
+          Print version
+```
 
 To run the 6502 functional tests and print staticstics every 26_000_000 instructions:
 
 ```sh
-# Assuming https://github.com/Klaus2m5/6502_65C02_functional_tests is cloned one directory above
+#
+# Assuming https://github.com/Klaus2m5/6502_65C02_functional_tests is cloned one directory above:
+# 
+# `git clone https://github.com/Klaus2m5/6502_65C02_functional_tests ../6502_65C02_functional_tests
+#
 cargo run --release \
     ../6502_65C02_functional_tests/bin_files/6502_functional_test.bin \
     --print-stats 26000000 \

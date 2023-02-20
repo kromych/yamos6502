@@ -1,5 +1,6 @@
 use clap::Parser;
 use yamos6502::Memory;
+use yamos6502::StackWraparound;
 use yamos6502::MAX_MEMORY_SIZE;
 use yamos6502::RESET_VECTOR;
 
@@ -15,6 +16,9 @@ struct Args {
     /// Initial program counter.
     #[arg(long, default_value_t = 0x400)]
     reset_pc: u16,
+    /// Allow stack wraparound.
+    #[arg(long, default_value_t = true)]
+    stack_wraparound: bool,
     /// Pause in milliseconds between executing instructions
     #[arg(long)]
     pause_millis: Option<u64>,
@@ -102,12 +106,19 @@ fn main() -> anyhow::Result<()> {
     // Fill the gap
     memory.extend_from_slice(&vec![0; MAX_MEMORY_SIZE - memory.len()]);
 
+    let allow_stack_wraparound = if args.stack_wraparound {
+        StackWraparound::Allow
+    } else {
+        StackWraparound::Disallow
+    };
+    log::info!("Stack wraparound policy: {allow_stack_wraparound:?}");
+
     log::info!("Setting reset vector to 0x{:04x?}", args.reset_pc);
     memory[RESET_VECTOR as usize] = args.reset_pc as u8;
     memory[RESET_VECTOR as usize + 1] = (args.reset_pc >> 8) as u8;
 
     let mut memory = RomRam::new(memory, args.rom_start);
-    let mut mos6502 = yamos6502::Mos6502::new(&mut memory);
+    let mut mos6502 = yamos6502::Mos6502::new(&mut memory, allow_stack_wraparound);
 
     mos6502.set_reset_pending();
 

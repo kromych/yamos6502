@@ -84,6 +84,13 @@ pub enum RunError {
     MemoryAccess(MemoryError),
 }
 
+/// Stack wraparound policy
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StackWraparound {
+    Allow,
+    Disallow,
+}
+
 /// Behavioral MOS 6502 emulator
 #[derive(Debug)]
 pub struct Mos6502<'memory, M>
@@ -101,13 +108,14 @@ where
     // Jammed, only reset will help
     fault: Option<RunError>,
     last_opcode: u8,
+    allow_stack_wraparound: StackWraparound,
 }
 
 impl<'memory, M> Mos6502<'memory, M>
 where
     M: Memory,
 {
-    pub fn new(memory: &'memory mut M) -> Self {
+    pub fn new(memory: &'memory mut M, allow_stack_wraparound: StackWraparound) -> Self {
         Self {
             mem: memory,
             reg_file: RegisterFile::default(),
@@ -116,10 +124,15 @@ where
             irq_pending: AtomicBool::new(false),
             fault: None,
             last_opcode: 0,
+            allow_stack_wraparound,
         }
     }
 
-    pub fn with_registers(memory: &'memory mut M, regf: RegisterFile) -> Self {
+    pub fn with_registers(
+        memory: &'memory mut M,
+        regf: RegisterFile,
+        allow_stack_wraparound: StackWraparound,
+    ) -> Self {
         Self {
             mem: memory,
             reg_file: regf,
@@ -128,6 +141,7 @@ where
             irq_pending: AtomicBool::new(false),
             fault: None,
             last_opcode: 0,
+            allow_stack_wraparound,
         }
     }
 
@@ -329,23 +343,25 @@ where
     #[inline]
     fn stack_push_u8(&mut self, value: u8) -> Result<(), RunError> {
         let sp = self.reg_file.sp();
-        if sp == 0 {
+        self.write_u8(STACK_BOTTOM + sp as u16, value)?;
+        *self.reg_file.sp_mut() = sp.wrapping_sub(1);
+
+        if sp == u8::MAX && self.allow_stack_wraparound == StackWraparound::Disallow {
             return Err(RunError::StackOverflow);
         }
-        self.write_u8(STACK_BOTTOM + sp as u16, value)?;
-        *self.reg_file.sp_mut() = sp - 1;
 
         Ok(())
     }
 
     #[inline]
     fn stack_pull_u8(&mut self) -> Result<u8, RunError> {
-        let sp = self.reg_file.sp();
-        if sp == u8::MAX {
+        let sp = self.reg_file.sp().wrapping_add(1);
+        if sp == 0 && self.allow_stack_wraparound == StackWraparound::Disallow {
             return Err(RunError::StackUnderflow);
         }
-        let value = self.read_u8(STACK_BOTTOM + sp as u16 + 1)?;
-        *self.reg_file.sp_mut() = sp + 1;
+
+        let value = self.read_u8(STACK_BOTTOM + sp as u16)?;
+        *self.reg_file.sp_mut() = sp;
 
         Ok(value)
     }

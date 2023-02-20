@@ -431,6 +431,85 @@ where
     }
 
     #[inline]
+    fn lsr(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
+        let mut carry = false;
+        self.read_modify_write_mem(addr_mode, |v| {
+            carry = v & 1 != 0;
+            v.wrapping_shr(1)
+        })?;
+        self.reg_file.set_flag_from_cond(Status::Carry, carry);
+        Ok(())
+    }
+
+    #[inline]
+    fn lsra(&mut self) {
+        let mut carry = false;
+        self.read_modify_write_reg(Register::A, |v| {
+            carry = v & 1 != 0;
+            v.wrapping_shr(1)
+        });
+        self.reg_file.set_flag_from_cond(Status::Carry, carry);
+    }
+
+    #[inline]
+    fn ror(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
+        let mut carry = false;
+        let carry_set = self.flag_set(Status::Carry);
+
+        self.read_modify_write_mem(addr_mode, |v| {
+            carry = v & 1 != 0;
+            let v = v.rotate_right(1);
+            if carry_set {
+                v | 0b1000_0000
+            } else {
+                v & 0b0111_1111
+            }
+        })?;
+        self.reg_file.set_flag_from_cond(Status::Carry, carry);
+
+        Ok(())
+    }
+
+    #[inline]
+    fn rora(&mut self) {
+        let mut carry = false;
+        let carry_set = self.flag_set(Status::Carry);
+
+        self.read_modify_write_reg(Register::A, |v| {
+            carry = v & 1 != 0;
+            let v = v.rotate_right(1);
+            if carry_set {
+                v | 0b1000_0000
+            } else {
+                v & 0b0111_1111
+            }
+        });
+        self.reg_file.set_flag_from_cond(Status::Carry, carry);
+    }
+
+    #[inline]
+    fn asl(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
+        let mut carry = false;
+        self.read_modify_write_mem(addr_mode, |v| {
+            carry = v >> 7 != 0;
+            v.wrapping_shl(1)
+        })?;
+        self.reg_file.set_flag_from_cond(Status::Carry, carry);
+
+        Ok(())
+    }
+
+    #[inline]
+    fn asla(&mut self) {
+        let mut carry = false;
+        self.read_modify_write_reg(Register::A, |v| {
+            carry = v >> 7 != 0;
+            v.wrapping_shl(1)
+        });
+        self.reg_file.set_flag_from_cond(Status::Carry, carry);
+    }
+
+    #[inline]
     fn adc(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
         if self.flag_set(Status::Decimal) {
             todo!("Decimal mode is not supported for adc just yet");
@@ -617,47 +696,19 @@ where
 
             // Group 0b10. Bit operation and accumulator operations,
             // less regular than the ALU group.
-            Insn::ASLA => {
-                let mut carry = false;
-                self.read_modify_write_reg(Register::A, |v| {
-                    carry = v >> 7 != 0;
-                    v.wrapping_shl(1)
-                });
-                self.reg_file.set_flag_from_cond(Status::Carry, carry);
-            }
-            Insn::ASL(addr_mode) => {
-                let mut carry = false;
-                self.read_modify_write_mem(addr_mode, |v| {
-                    carry = v >> 7 != 0;
-                    v.wrapping_shl(1)
-                })?;
-                self.reg_file.set_flag_from_cond(Status::Carry, carry);
-            }
+            Insn::ASLA => self.asla(),
+            Insn::ASL(addr_mode) => self.asl(addr_mode)?,
             Insn::DEC(addr_mode) => self.read_modify_write_mem(addr_mode, |v| v.wrapping_sub(1))?,
             Insn::DEX => self.read_modify_write_reg(Register::X, |v| v.wrapping_sub(1)),
             Insn::INC(addr_mode) => self.read_modify_write_mem(addr_mode, |v| v.wrapping_add(1))?,
             Insn::LDX(addr_mode) => self.mem_to_reg(addr_mode, Register::X)?,
-            Insn::LSRA => {
-                let mut carry = false;
-                self.read_modify_write_reg(Register::A, |v| {
-                    carry = v & 1 != 0;
-                    v.wrapping_shr(1)
-                });
-                self.reg_file.set_flag_from_cond(Status::Carry, carry);
-            }
-            Insn::LSR(addr_mode) => {
-                let mut carry = false;
-                self.read_modify_write_mem(addr_mode, |v| {
-                    carry = v & 1 != 0;
-                    v.wrapping_shr(1)
-                })?;
-                self.reg_file.set_flag_from_cond(Status::Carry, carry);
-            }
+            Insn::LSRA => self.lsra(),
+            Insn::LSR(addr_mode) => self.lsr(addr_mode)?,
             Insn::NOP => {}
             Insn::ROLA => todo!("rol a"),
             Insn::ROL(_addr_mode) => todo!("rol"),
-            Insn::RORA => todo!("ror a"),
-            Insn::ROR(_addr_mode) => todo!("ror"),
+            Insn::RORA => self.rora(),
+            Insn::ROR(addr_mode) => self.ror(addr_mode)?,
             Insn::STX(addr_mode) => self.reg_to_mem(Register::X, addr_mode)?,
             Insn::TAX => self.reg_to_reg(Register::A, Register::X),
             Insn::TSX => self.reg_to_reg(Register::S, Register::X),

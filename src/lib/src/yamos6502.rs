@@ -492,6 +492,7 @@ where
                 self.stack_push_u8(p | Status::Break.mask() | Status::AlwaysSet.mask())?;
                 // Disable interrupts
                 self.reg_file.set_flag(Status::InterruptDisable);
+                self.reg_file.set_pc(self.read_u16(IRQ_BRK_VECTOR)?);
             }
             Insn::BCC(addr_mode) => self.branch(addr_mode, !self.flag_set(Status::Carry))?,
             Insn::BCS(addr_mode) => self.branch(addr_mode, self.flag_set(Status::Carry))?,

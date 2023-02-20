@@ -315,10 +315,10 @@ where
     fn read_modify_write_mem<F>(
         &mut self,
         addr_mode: AddressMode,
-        modify: F,
+        mut modify: F,
     ) -> Result<(), RunError>
     where
-        F: Fn(u8) -> u8,
+        F: FnMut(u8) -> u8,
     {
         let ea = self.get_effective_address(addr_mode)?;
         let value = self.read_u8(ea)?;
@@ -330,9 +330,9 @@ where
     }
 
     #[inline]
-    fn read_modify_write_reg<F>(&mut self, reg: Register, modify: F)
+    fn read_modify_write_reg<F>(&mut self, reg: Register, mut modify: F)
     where
-        F: Fn(u8) -> u8,
+        F: FnMut(u8) -> u8,
     {
         let value = self.reg_file.reg(reg);
         let value = modify(value);
@@ -617,8 +617,22 @@ where
 
             // Group 0b10. Bit operation and accumulator operations,
             // less regular than the ALU group.
-            Insn::ASLA => todo!("asl a"),
-            Insn::ASL(_addr_mode) => todo!("asl"),
+            Insn::ASLA => {
+                let mut carry = false;
+                self.read_modify_write_reg(Register::A, |v| {
+                    carry = v >> 7 != 0;
+                    v.wrapping_shl(1)
+                });
+                self.reg_file.set_flag_from_cond(Status::Carry, carry)
+            }
+            Insn::ASL(addr_mode) => {
+                let mut carry = false;
+                self.read_modify_write_mem(addr_mode, |v| {
+                    carry = v >> 7 != 0;
+                    v.wrapping_shl(1)
+                })?;
+                self.reg_file.set_flag_from_cond(Status::Carry, carry)
+            }
             Insn::DEC(addr_mode) => self.read_modify_write_mem(addr_mode, |v| v.wrapping_sub(1))?,
             Insn::DEX => self.read_modify_write_reg(Register::X, |v| v.wrapping_sub(1)),
             Insn::INC(addr_mode) => self.read_modify_write_mem(addr_mode, |v| v.wrapping_add(1))?,

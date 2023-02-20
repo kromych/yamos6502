@@ -365,7 +365,7 @@ where
         if sp == u8::MAX {
             return Err(RunError::StackUnderflow);
         }
-        let value = self.read_u8(STACK_BOTTOM + sp as u16)?;
+        let value = self.read_u8(STACK_BOTTOM + sp as u16 + 1)?;
         *self.reg_file.sp_mut() = sp + 1;
 
         Ok(value)
@@ -377,7 +377,7 @@ where
         if sp > u8::MAX - 2 {
             return Err(RunError::StackUnderflow);
         }
-        let value = self.read_u16(STACK_BOTTOM + sp as u16)?;
+        let value = self.read_u16(STACK_BOTTOM + sp as u16 + 1)?;
         *self.reg_file.sp_mut() = sp + 2;
 
         Ok(value)

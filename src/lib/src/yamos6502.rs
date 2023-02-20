@@ -391,9 +391,13 @@ where
     #[inline]
     fn branch(&mut self, addr_mode: AddressMode, cond: bool) -> Result<(), RunError> {
         if cond {
+            // Branch taken: get the offset
             let ea = self.get_effective_address(addr_mode)?;
             let offset = self.read_u8(ea)? as i8;
             self.reg_file.adjust_pc_by(offset);
+        } else {
+            // Branch not taken: skip the offset byte
+            self.reg_file.adjust_pc_by(1);
         }
         Ok(())
     }

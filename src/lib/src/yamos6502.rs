@@ -348,18 +348,6 @@ where
     }
 
     #[inline]
-    fn stack_push_u16(&mut self, value: u16) -> Result<(), RunError> {
-        let sp = self.reg_file.sp();
-        if sp < 2 {
-            return Err(RunError::StackOverflow);
-        }
-        self.write_u16(STACK_BOTTOM + sp as u16, value)?;
-        *self.reg_file.sp_mut() = sp - 2;
-
-        Ok(())
-    }
-
-    #[inline]
     fn stack_pull_u8(&mut self) -> Result<u8, RunError> {
         let sp = self.reg_file.sp();
         if sp == u8::MAX {
@@ -372,15 +360,19 @@ where
     }
 
     #[inline]
-    fn stack_pull_u16(&mut self) -> Result<u16, RunError> {
-        let sp = self.reg_file.sp();
-        if sp > u8::MAX - 2 {
-            return Err(RunError::StackUnderflow);
-        }
-        let value = self.read_u16(STACK_BOTTOM + sp as u16 + 1)?;
-        *self.reg_file.sp_mut() = sp + 2;
+    fn stack_push_u16(&mut self, value: u16) -> Result<(), RunError> {
+        self.stack_push_u8((value >> 8) as u8)?;
+        self.stack_push_u8(value as u8)?;
 
-        Ok(value)
+        Ok(())
+    }
+
+    #[inline]
+    fn stack_pull_u16(&mut self) -> Result<u16, RunError> {
+        let lo = self.stack_pull_u8()?;
+        let hi = self.stack_pull_u8()?;
+
+        Ok(u16::from_le_bytes([lo, hi]))
     }
 
     #[inline]

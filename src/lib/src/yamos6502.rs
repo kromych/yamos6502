@@ -415,6 +415,22 @@ where
     }
 
     #[inline]
+    fn bit(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
+        let ea = self.get_effective_address(addr_mode)?;
+        let data = self.read_u8(ea)?;
+        let a = self.reg_file.a();
+
+        self.reg_file
+            .set_flag_from_cond(Status::Zero, data & a == 0);
+        self.reg_file
+            .set_flag_from_cond(Status::Negative, data & Status::Negative.mask() != 0);
+        self.reg_file
+            .set_flag_from_cond(Status::Overflow, data & Status::Overflow.mask() != 0);
+
+        Ok(())
+    }
+
+    #[inline]
     fn adc(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
         if self.flag_set(Status::Decimal) {
             todo!("Decimal mode is not supported for adc just yet");
@@ -518,7 +534,7 @@ where
             Insn::BVS(addr_mode) => self.branch(addr_mode, self.flag_set(Status::Overflow))?,
             Insn::BPL(addr_mode) => self.branch(addr_mode, !self.flag_set(Status::Negative))?,
             Insn::BMI(addr_mode) => self.branch(addr_mode, self.flag_set(Status::Negative))?,
-            Insn::BIT(_addr_mode) => todo!("bit"),
+            Insn::BIT(addr_mode) => self.bit(addr_mode)?,
             Insn::CLC => self.reg_file.clear_flag(Status::Carry),
             Insn::CLD => self.reg_file.clear_flag(Status::Decimal),
             Insn::CLI => self.reg_file.clear_flag(Status::InterruptDisable),

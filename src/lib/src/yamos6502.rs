@@ -165,15 +165,6 @@ where
         Ok(u16::from_le_bytes([lo, hi]))
     }
 
-    fn write_u16(&mut self, addr: u16, value: u16) -> Result<(), RunError> {
-        self.mem
-            .write(addr, value as u8)
-            .map_err(RunError::MemoryAccess)?;
-        self.mem
-            .write(addr.wrapping_add(1), (value >> 8) as u8)
-            .map_err(RunError::MemoryAccess)
-    }
-
     /// Computes the effective address. Expects the program counter being advanced past
     /// the instruction opcode, and advances it to skip the addressing mode bytes.
     fn get_effective_address(&mut self, addr_mode: AddressMode) -> Result<u16, RunError> {

@@ -176,13 +176,40 @@ impl Default for RegisterFile {
 
 impl Debug for RegisterFile {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut flags = ['n', 'v', 'x', 'b', 'd', 'i', 'z', 'c'];
+
+        if self.flag_set(Status::Negative) {
+            flags[7 - (Status::Negative as u8 as usize)] = 'N';
+        }
+        if self.flag_set(Status::Overflow) {
+            flags[7 - (Status::Overflow as u8 as usize)] = 'V';
+        }
+        if self.flag_set(Status::AlwaysSet) {
+            flags[7 - (Status::AlwaysSet as u8 as usize)] = 'X';
+        }
+        if self.flag_set(Status::Break) {
+            flags[7 - (Status::Break as u8 as usize)] = 'B';
+        }
+        if self.flag_set(Status::Decimal) {
+            flags[7 - (Status::Decimal as u8 as usize)] = 'D';
+        }
+        if self.flag_set(Status::InterruptDisable) {
+            flags[7 - (Status::InterruptDisable as u8 as usize)] = 'I';
+        }
+        if self.flag_set(Status::Zero) {
+            flags[7 - (Status::Zero as u8 as usize)] = 'Z';
+        }
+        if self.flag_set(Status::Carry) {
+            flags[7 - (Status::Carry as u8 as usize)] = 'C';
+        }
+
         f.debug_struct("RegisterFile")
             .field("PC", &self.pc)
             .field("A", &self.a())
             .field("X", &self.x())
             .field("Y", &self.y())
             .field("SP", &self.sp())
-            .field("P", &self.reg(Register::P))
+            .field("P", &flags)
             .finish()
     }
 }

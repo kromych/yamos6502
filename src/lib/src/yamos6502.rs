@@ -31,6 +31,9 @@ pub enum MemoryError {
     ReadOnlyAddress(u16),
 }
 
+/// No more than 64 KiB of memory is supported
+pub const MAX_MEMORY_SIZE: usize = u16::MAX as usize + 1;
+
 /// A 16-bit addressable, 8-bit cell memory
 pub trait Memory {
     fn write(&mut self, addr: u16, value: u8) -> Result<(), MemoryError>;
@@ -128,15 +131,15 @@ where
         }
     }
 
-    pub fn irq(&mut self) {
+    pub fn set_irq_pending(&mut self) {
         self.irq_pending.store(true, Ordering::Release);
     }
 
-    pub fn reset(&mut self) {
+    pub fn set_reset_pending(&mut self) {
         self.reset_pending.store(true, Ordering::Release);
     }
 
-    pub fn nmi(&mut self) {
+    pub fn set_nmi_pending(&mut self) {
         self.nmi_pending.store(true, Ordering::Release);
     }
 
@@ -522,17 +525,17 @@ where
             Insn::INX => self.read_modify_write_reg(Register::X, |v| v.wrapping_add(1)),
             Insn::INY => self.read_modify_write_reg(Register::Y, |v| v.wrapping_add(1)),
             Insn::JMP(addr_mode) => {
-                let pc_ptr = self.get_effective_address(addr_mode)?;
-                self.reg_file.set_pc(self.read_u16(pc_ptr)?);
+                let ea = self.get_effective_address(addr_mode)?;
+                self.reg_file.set_pc(ea);
             }
             Insn::JSR(addr_mode) => {
                 // Get the new PC location (which also skips the JSR instruction bytes)
-                let pc_ptr = self.get_effective_address(addr_mode)?;
+                let ea = self.get_effective_address(addr_mode)?;
                 // Now the PC is right after the JSR operation along with its operand.
                 // This PC will be the return address for RTS, push it to the stack
                 self.stack_push_u16(self.reg_file.pc())?;
                 // Jump to the subroutine
-                self.reg_file.set_pc(self.read_u16(pc_ptr)?);
+                self.reg_file.set_pc(ea);
             }
             Insn::LDY(addr_mode) => self.mem_to_reg(addr_mode, Register::Y)?,
             Insn::PHA => self.stack_push_u8(self.reg_file.a())?,

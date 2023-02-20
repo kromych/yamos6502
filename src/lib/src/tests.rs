@@ -136,7 +136,7 @@ fn test_loads() {
     // Write the program to the memory
     memory.write(TEST_START, &program);
 
-    let mut mos6502 = Mos6502::new(&mut memory);
+    let mut mos6502 = Mos6502::new(&mut memory, StackWraparound::Disallow);
     mos6502.set_reset_pending();
 
     assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::LDA(AddressMode::Immediate)));
@@ -296,7 +296,7 @@ fn test_stores() {
         *regf.y_mut() = 0x2c;
         regf.set_pc(TEST_START);
 
-        let mut mos6502 = Mos6502::with_registers(&mut memory, regf);
+        let mut mos6502 = Mos6502::with_registers(&mut memory, regf, StackWraparound::Disallow);
 
         assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::STA(AddressMode::Absolute)));
         assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::STA(AddressMode::AbsoluteX)));

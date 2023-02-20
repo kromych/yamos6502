@@ -452,6 +452,42 @@ where
     }
 
     #[inline]
+    fn rol(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
+        let mut carry = false;
+        let carry_set = self.flag_set(Status::Carry);
+
+        self.read_modify_write_mem(addr_mode, |v| {
+            carry = v >> 7 != 0;
+            let v = v.rotate_left(1);
+            if carry_set {
+                v | 0b0000_0001
+            } else {
+                v & 0b1111_1110
+            }
+        })?;
+        self.reg_file.set_flag_from_cond(Status::Carry, carry);
+
+        Ok(())
+    }
+
+    #[inline]
+    fn rola(&mut self) {
+        let mut carry = false;
+        let carry_set = self.flag_set(Status::Carry);
+
+        self.read_modify_write_reg(Register::A, |v| {
+            carry = v >> 7 != 0;
+            let v = v.rotate_left(1);
+            if carry_set {
+                v | 0b0000_0001
+            } else {
+                v & 0b1111_1110
+            }
+        });
+        self.reg_file.set_flag_from_cond(Status::Carry, carry);
+    }
+
+    #[inline]
     fn ror(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
         let mut carry = false;
         let carry_set = self.flag_set(Status::Carry);
@@ -705,8 +741,8 @@ where
             Insn::LSRA => self.lsra(),
             Insn::LSR(addr_mode) => self.lsr(addr_mode)?,
             Insn::NOP => {}
-            Insn::ROLA => todo!("rol a"),
-            Insn::ROL(_addr_mode) => todo!("rol"),
+            Insn::ROLA => self.rola(),
+            Insn::ROL(addr_mode) => self.rol(addr_mode)?,
             Insn::RORA => self.rora(),
             Insn::ROR(addr_mode) => self.ror(addr_mode)?,
             Insn::STX(addr_mode) => self.reg_to_mem(Register::X, addr_mode)?,

@@ -143,7 +143,7 @@ impl RegisterFile {
 
     #[inline]
     pub fn adjust_pc_by(&mut self, offset: i8) {
-        self.pc = self.pc.wrapping_add((offset as u8).into());
+        self.pc = self.pc.wrapping_add(offset as i16 as u16).into();
     }
 
     #[inline]

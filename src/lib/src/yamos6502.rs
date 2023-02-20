@@ -537,7 +537,7 @@ where
                 let ea = self.get_effective_address(addr_mode)?;
                 // Now the PC is right after the JSR operation along with its operand.
                 // This PC will be the return address for RTS, push it to the stack
-                self.stack_push_u16(self.reg_file.pc())?;
+                self.stack_push_u16(self.reg_file.pc() - 1)?;
                 // Jump to the subroutine
                 self.reg_file.set_pc(ea);
             }
@@ -569,7 +569,7 @@ where
             }
             Insn::RTS => {
                 let pc = self.stack_pull_u16()?;
-                self.reg_file.set_pc(pc);
+                self.reg_file.set_pc(pc + 1);
             }
             Insn::SEC => self.reg_file.set_flag(Status::Carry),
             Insn::SED => self.reg_file.set_flag(Status::Decimal),

@@ -309,6 +309,91 @@ fn test_stores() {
 }
 
 #[test]
+fn test_alu() {
+    let mut memory = TestMemory::default();
+
+    let program = [
+        encode_insn(Insn::LDA(AddressMode::Immediate)),
+        0x00,
+        encode_insn(Insn::STA(AddressMode::Zeropage)),
+        0x12,
+        encode_insn(Insn::CLC),
+        encode_insn(Insn::CLD),
+        encode_insn(Insn::LDA(AddressMode::Immediate)),
+        0x90,
+        encode_insn(Insn::ADC(AddressMode::Zeropage)),
+        0x12,
+        encode_insn(Insn::SBC(AddressMode::Zeropage)),
+        0x12,
+        encode_insn(Insn::CLC),
+        encode_insn(Insn::SED),
+        encode_insn(Insn::LDA(AddressMode::Immediate)),
+        0x90,
+        encode_insn(Insn::ADC(AddressMode::Zeropage)),
+        0x12,
+        encode_insn(Insn::SBC(AddressMode::Zeropage)),
+        0x12,
+    ];
+
+    // Write the program to the memory
+    memory.write(TEST_START, &program);
+
+    let mut regf = RegisterFile::default();
+    regf.set_pc(TEST_START);
+
+    let mut mos6502 = Mos6502::with_registers(&mut memory, regf, StackWraparound::Disallow);
+
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::LDA(AddressMode::Immediate)));
+    assert!(mos6502.registers().flag_set(Status::Zero));
+    assert!(!mos6502.registers().flag_set(Status::Negative));
+    assert!(mos6502.registers().a() == 0);
+
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::STA(AddressMode::Zeropage)));
+
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::CLC));
+    assert!(!mos6502.registers().flag_set(Status::Carry));
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::CLD));
+    assert!(!mos6502.registers().flag_set(Status::Decimal));
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::LDA(AddressMode::Immediate)));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
+    assert!(mos6502.registers().a() == 0x90);
+
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::ADC(AddressMode::Zeropage)));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(!mos6502.registers().flag_set(Status::Carry));
+    assert!(mos6502.registers().flag_set(Status::Negative));
+    assert!(mos6502.registers().a() == 0x90);
+
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::SBC(AddressMode::Zeropage)));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Carry));
+    assert!(mos6502.registers().flag_set(Status::Negative));
+    assert!(mos6502.registers().a() == 0x8f);
+
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::CLC));
+    assert!(!mos6502.registers().flag_set(Status::Carry));
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::SED));
+    assert!(mos6502.registers().flag_set(Status::Decimal));
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::LDA(AddressMode::Immediate)));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Negative));
+    assert!(mos6502.registers().a() == 0x90);
+
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::ADC(AddressMode::Zeropage)));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(!mos6502.registers().flag_set(Status::Carry));
+    assert!(mos6502.registers().flag_set(Status::Negative));
+    assert!(mos6502.registers().a() == 0x90);
+
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::SBC(AddressMode::Zeropage)));
+    assert!(!mos6502.registers().flag_set(Status::Zero));
+    assert!(mos6502.registers().flag_set(Status::Carry));
+    assert!(mos6502.registers().flag_set(Status::Negative));
+    assert!(mos6502.registers().a() == 0x89);
+}
+
+#[test]
 fn test_insn() {
     for g in 0..3_u8 {
         for h in 0..8 {

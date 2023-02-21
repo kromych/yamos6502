@@ -215,9 +215,8 @@ fn main() -> anyhow::Result<()> {
             dead_loop_iterations = 0;
         }
         if dead_loop_iterations > args.dead_loop_iterations {
-            anyhow::bail!(
-                "the code has been in a dead loop for {dead_loop_iterations} iterations, aborting"
-            );
+            log::error!("Dead loop with {:04x?}", mos6502.registers());
+            anyhow::bail!("Dead loop for {dead_loop_iterations} iterations, aborting");
         }
     }
 }

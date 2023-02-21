@@ -547,55 +547,70 @@ where
 
     #[inline]
     fn adc(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
-        if self.flag_set(Status::Decimal) {
-            todo!("Decimal mode is not supported for adc just yet");
-        }
-
+        let decimal = self.flag_set(Status::Decimal);
         let carry_in = self.flag_set(Status::Carry) as u16;
         let mut carry_out = false;
-        let mut overflow = false;
+        let mut overflow = self.flag_set(Status::Overflow);
+        let mut negative = self.flag_set(Status::Negative);
+        let mut zero = self.flag_set(Status::Zero);
 
         let a = self.reg_file.a();
         self.read_modify_to_reg(addr_mode, Register::A, |v| {
-            let r = v as u16 + a as u16 + carry_in;
-            carry_out = r & 0xff00 != 0;
+            let mut r = (v as u16).wrapping_add(a as u16).wrapping_add(carry_in);
+            zero = r & 0xff == 0;
 
-            // Signed overflow happens if the sign of the operands is different
-            // from sign of the result, and either the sum of two positive numbers
-            // can't be represented as a positive number or the sum of the negative
-            // numbers can't be represented as a negative number. Refer to
-            // https://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
-            // for the in depth explanation.
-            overflow = ((a as u16) ^ r) & ((v as u16) ^ r) & 0x0080 != 0;
+            if !decimal {
+                carry_out = r & 0xff00 != 0;
+                negative = r & 0x80 != 0;
+
+                // Signed overflow happens if the sign of the operands is different
+                // from sign of the result, and either the sum of two positive numbers
+                // can't be represented as a positive number or the sum of the negative
+                // numbers can't be represented as a negative number. Refer to
+                // https://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
+                // for the in depth explanation.
+                overflow = ((a as u16) ^ r) & ((v as u16) ^ r) & 0x0080 != 0;
+            } else {
+                if (a & 0xf) + (v & 0xf) + (carry_in as u8) > 9 {
+                    r = r.wrapping_add(6);
+                }
+                negative = r & 0x80 != 0;
+                overflow = ((a as u16) ^ r) & ((v as u16) ^ r) & 0x0080 != 0;
+
+                if r > 0x99 {
+                    r = r.wrapping_add(96);
+                }
+                carry_out = r > 0x99;
+            }
 
             r as u8
         })?;
 
         self.reg_file.set_flag_from_cond(Status::Carry, carry_out);
         self.reg_file.set_flag_from_cond(Status::Overflow, overflow);
+        self.reg_file.set_flag_from_cond(Status::Negative, negative);
+        self.reg_file.set_flag_from_cond(Status::Zero, zero);
 
         Ok(())
     }
 
     #[inline]
     fn sbc(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
-        if self.flag_set(Status::Decimal) {
-            todo!("Decimal mode is not supported for sbc just yet");
-        }
+        let decimal = self.flag_set(Status::Decimal);
 
         // In the hardware, `sbc operand` is `adc ~operand` (or 255-operand, i.e.
-        // 1-compliment).
-
-        // There is no explicit borrow flag,
-        // instead the complement of the carry flag is used.
+        // 1-compliment). There is no explicit borrow flag, instead the complement
+        // of the carry flag is used.
         let borrow_in = !self.flag_set(Status::Carry) as i16;
         let mut borrow_out = false;
-        let mut overflow = false;
+        let mut overflow = self.flag_set(Status::Overflow);
+        let mut negative = self.flag_set(Status::Negative);
+        let mut zero = self.flag_set(Status::Zero);
 
         let a = self.reg_file.a();
         self.read_modify_to_reg(addr_mode, Register::A, |v| {
-            let r = a as i16 - v as i16 - borrow_in;
-            borrow_out = (r as u16) & 0xff00 != 0;
+            let mut r = (a as i16).wrapping_sub(v as i16).wrapping_sub(borrow_in);
+            zero = r & 0xff == 0;
 
             // Signed overflow happens if the sign of the operands is different
             // from sign of the result, and either the sum of two positive numbers
@@ -603,13 +618,28 @@ where
             // numbers can't be represented as a negative number. Refer to
             // https://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
             // for the in depth explanation.
-            overflow = ((a as u16) ^ (r as u16)) & (((!v) as u16) ^ (r as u16)) & 0x0080 != 0;
+
+            if !decimal {
+                negative = r & 0x80 != 0;
+                overflow = ((a as u16) ^ (r as u16)) & ((!(v as u16)) ^ (r as u16)) & 0x0080 != 0;
+                borrow_out = (r as u16) & 0xff00 != 0;
+            } else {
+                if (a & 0xf) < (v & 0xf) + borrow_in as u8 {
+                    r -= 6;
+                }
+                if r > 0x99 {
+                    r -= 0x60;
+                }
+                borrow_out = r < 0x100;
+            }
 
             r as u8
         })?;
 
         self.reg_file.set_flag_from_cond(Status::Carry, !borrow_out);
         self.reg_file.set_flag_from_cond(Status::Overflow, overflow);
+        self.reg_file.set_flag_from_cond(Status::Negative, negative);
+        self.reg_file.set_flag_from_cond(Status::Zero, zero);
 
         Ok(())
     }

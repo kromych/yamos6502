@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+use crate::bcd::bcd_to_u8;
+use crate::bcd::u8_to_bcd;
 use crate::*;
 
 struct TestMemory {
@@ -407,4 +409,13 @@ fn test_insn() {
             }
         }
     }
+}
+
+#[test]
+fn test_bcd() {
+    let x = bcd_to_u8(0x89);
+    assert!(x == 89);
+
+    let x = u8_to_bcd(89);
+    assert!(x == 0x89);
 }

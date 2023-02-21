@@ -16,6 +16,8 @@ use core::fmt::Debug;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 
+use crate::bcd::bcd_to_u8;
+use crate::bcd::u8_to_bcd;
 use crate::insns::Insn;
 use crate::AddressMode;
 use crate::Register;
@@ -548,7 +550,7 @@ where
     #[inline]
     fn adc(&mut self, addr_mode: AddressMode) -> Result<(), RunError> {
         let decimal = self.flag_set(Status::Decimal);
-        let carry_in = self.flag_set(Status::Carry) as u16;
+        let carry_in = self.flag_set(Status::Carry) as u8;
         let mut carry_out = false;
         let mut overflow = self.flag_set(Status::Overflow);
         let mut negative = self.flag_set(Status::Negative);
@@ -556,12 +558,10 @@ where
 
         let a = self.reg_file.a();
         self.read_modify_to_reg(addr_mode, Register::A, |v| {
-            let mut r = (v as u16).wrapping_add(a as u16).wrapping_add(carry_in);
-            zero = r & 0xff == 0;
-
-            if !decimal {
-                carry_out = r & 0xff00 != 0;
-                negative = r & 0x80 != 0;
+            let r = if !decimal {
+                let v = v as u16;
+                let a = a as u16;
+                let r = v.wrapping_add(a).wrapping_add(carry_in as u16);
 
                 // Signed overflow happens if the sign of the operands is different
                 // from sign of the result, and either the sum of two positive numbers
@@ -569,19 +569,22 @@ where
                 // numbers can't be represented as a negative number. Refer to
                 // https://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
                 // for the in depth explanation.
-                overflow = ((a as u16) ^ r) & ((v as u16) ^ r) & 0x0080 != 0;
-            } else {
-                if (a & 0xf) + (v & 0xf) + (carry_in as u8) > 9 {
-                    r = r.wrapping_add(6);
-                }
-                negative = r & 0x80 != 0;
-                overflow = ((a as u16) ^ r) & ((v as u16) ^ r) & 0x0080 != 0;
+                overflow = (a ^ r) & (v ^ r) & 0x0080 != 0;
+                carry_out = r & 0xff00 != 0;
 
-                if r > 0x99 {
-                    r = r.wrapping_add(96);
+                r
+            } else {
+                let mut r = bcd_to_u8(a) + bcd_to_u8(v) + carry_in;
+                carry_out = r > 99;
+                if carry_out {
+                    r -= 100;
                 }
-                carry_out = r > 0x99;
-            }
+
+                u8_to_bcd(r) as u16
+            };
+
+            zero = r & 0xff == 0;
+            negative = r & 0x80 != 0;
 
             r as u8
         })?;
@@ -601,7 +604,7 @@ where
         // In the hardware, `sbc operand` is `adc ~operand` (or 255-operand, i.e.
         // 1-compliment). There is no explicit borrow flag, instead the complement
         // of the carry flag is used.
-        let borrow_in = !self.flag_set(Status::Carry) as i16;
+        let borrow_in = !self.flag_set(Status::Carry) as u8;
         let mut borrow_out = false;
         let mut overflow = self.flag_set(Status::Overflow);
         let mut negative = self.flag_set(Status::Negative);
@@ -609,29 +612,33 @@ where
 
         let a = self.reg_file.a();
         self.read_modify_to_reg(addr_mode, Register::A, |v| {
-            let mut r = (a as i16).wrapping_sub(v as i16).wrapping_sub(borrow_in);
-            zero = r & 0xff == 0;
+            let r = if !decimal {
+                let a = a as u16;
+                let v = v as u16;
+                let r = a.wrapping_sub(v).wrapping_sub(borrow_in as u16);
+                borrow_out = r & 0xff00 != 0;
 
-            // Signed overflow happens if the sign of the operands is different
-            // from sign of the result, and either the sum of two positive numbers
-            // can't be represented as a positive number or the sum of the negative
-            // numbers can't be represented as a negative number. Refer to
-            // https://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
-            // for the in depth explanation.
+                // Signed overflow happens if the sign of the operands is different
+                // from sign of the result, and either the sum of two positive numbers
+                // can't be represented as a positive number or the sum of the negative
+                // numbers can't be represented as a negative number. Refer to
+                // https://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
+                // for the in depth explanation.
+                overflow = (a ^ r) & (!v ^ r) & 0x0080 != 0;
 
-            if !decimal {
-                negative = r & 0x80 != 0;
-                overflow = ((a as u16) ^ (r as u16)) & ((!(v as u16)) ^ (r as u16)) & 0x0080 != 0;
-                borrow_out = (r as u16) & 0xff00 != 0;
+                r
             } else {
-                if (a & 0xf) < (v & 0xf) + borrow_in as u8 {
-                    r -= 6;
+                let mut r  = bcd_to_u8(a).wrapping_sub(bcd_to_u8(v)).wrapping_sub(borrow_in) as i8;
+                borrow_out = r < 0;
+                if borrow_out {
+                    r += 100;
                 }
-                if r > 0x99 {
-                    r -= 0x60;
-                }
-                borrow_out = r < 0x100;
-            }
+
+                u8_to_bcd(r as u8) as u16
+            };
+
+            zero = r & 0xff == 0;
+            negative = r & 0x80 != 0;
 
             r as u8
         })?;

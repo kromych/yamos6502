@@ -60,6 +60,9 @@ struct Args {
     /// Initial program counter.
     #[arg(long, default_value_t = 0x400, value_parser=maybe_hex::<u16>)]
     reset_pc: u16,
+    /// Program counter at which exit
+    #[arg(long, default_value_t = 0x3469, value_parser=maybe_hex::<u16>)]
+    exit_pc: u16,
     /// Allow stack wraparound.
     #[arg(long, default_value_t = false)]
     stack_wraparound: bool,
@@ -172,10 +175,12 @@ fn main() -> anyhow::Result<()> {
     memory[RESET_VECTOR as usize] = args.reset_pc as u8;
     memory[RESET_VECTOR as usize + 1] = (args.reset_pc >> 8) as u8;
 
+    log::info!("Will exit at 0x{:04x?}", args.exit_pc);
+
     let mut memory = RomRam::new(memory, args.rom_start);
     let mut mos6502 = yamos6502::Mos6502::new(&mut memory, allow_stack_wraparound);
 
-    log::info!("Running emulator");
+    log::info!("Running MOS 6502 emulator");
 
     mos6502.set_reset_pending();
 
@@ -208,17 +213,30 @@ fn main() -> anyhow::Result<()> {
             std::thread::sleep(std::time::Duration::from_millis(millis));
         }
 
-        if prev_pc == mos6502.registers().pc() {
+        let pc = mos6502.registers().pc();
+        if pc == args.exit_pc {
+            log::info!("Exiting as the program is the exit PC 0x{pc:04x}",);
+            log::info!("Instruction emulated: {instructions_emulated}");
+            log::info!("{:04x?}", mos6502.registers());
+            break;
+        }
+
+        if prev_pc == pc {
             dead_loop_iterations += 1;
         } else {
-            prev_pc = mos6502.registers().pc();
+            prev_pc = pc;
             dead_loop_iterations = 0;
         }
         if dead_loop_iterations > args.dead_loop_iterations {
-            log::error!("Dead loop with {:04x?}", mos6502.registers());
+            log::error!(
+                "Dead loop with {:04x?} after {instructions_emulated} instructions",
+                mos6502.registers()
+            );
             anyhow::bail!("Dead loop for {dead_loop_iterations} iterations, aborting");
         }
     }
+
+    Ok(())
 }
 
 fn init_logger(log_level: LogLevel) {

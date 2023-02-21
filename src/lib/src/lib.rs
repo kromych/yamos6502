@@ -2,6 +2,7 @@
 
 #![no_std]
 
+mod bcd;
 mod insns;
 mod regfile;
 mod tests;

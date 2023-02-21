@@ -1,6 +1,4 @@
-use clap::builder::PossibleValue;
 use clap::Parser;
-use clap::ValueEnum;
 use clap_num::maybe_hex;
 
 use yamos6502::Memory;
@@ -8,43 +6,6 @@ use yamos6502::RunExit;
 use yamos6502::StackWraparound;
 use yamos6502::MAX_MEMORY_SIZE;
 use yamos6502::RESET_VECTOR;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum LogLevel {
-    Info,
-    Debug,
-    Trace,
-}
-
-impl LogLevel {
-    fn to_str(self) -> &'static str {
-        match self {
-            Self::Trace => "trace",
-            Self::Debug => "debug",
-            Self::Info => "info",
-        }
-    }
-}
-
-impl std::fmt::Display for LogLevel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{self:?}"))
-    }
-}
-
-impl ValueEnum for LogLevel {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[LogLevel::Info, LogLevel::Debug, LogLevel::Trace]
-    }
-
-    fn to_possible_value(&self) -> Option<PossibleValue> {
-        match self {
-            LogLevel::Info => Some(PossibleValue::new("info")),
-            LogLevel::Debug => Some(PossibleValue::new("debug")),
-            LogLevel::Trace => Some(PossibleValue::new("trace")),
-        }
-    }
-}
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -77,7 +38,7 @@ struct Args {
     dead_loop_iterations: u64,
     /// Logging level
     #[clap(long, default_value = "info")]
-    log: LogLevel,
+    log_level: log::LevelFilter,
 }
 
 struct RomRam {
@@ -121,7 +82,7 @@ impl Memory for RomRam {
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    init_logger(args.log);
+    init_logger(args.log_level);
 
     let mut memory = vec![];
     for file_path_addr in args.mem_file_list.split(',') {
@@ -239,8 +200,9 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn init_logger(log_level: LogLevel) {
-    env_logger::init_from_env(
-        env_logger::Env::default().filter_or("YAMOS6502_LEVEL", log_level.to_str()),
-    );
+fn init_logger(level: log::LevelFilter) {
+    env_logger::builder()
+        .format_timestamp_millis()
+        .filter(None, level)
+        .init();
 }

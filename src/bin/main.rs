@@ -176,8 +176,8 @@ fn main() -> anyhow::Result<()> {
 
         let pc = mos6502.registers().pc();
         if pc == args.exit_pc {
-            log::info!("Exiting as the program is the exit PC 0x{pc:04x}",);
-            log::info!("Instruction emulated: {instructions_emulated}");
+            log::info!("Exiting as the program is at the exit PC 0x{pc:04x}",);
+            log::info!("Instructions emulated: {instructions_emulated}");
             log::info!("{:04x?}", mos6502.registers());
             break;
         }

@@ -1,5 +1,5 @@
 [package]
-name = "yamos6502e"
+name = "yamos6502"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,8 +7,11 @@ edition = "2021"
 name = "yamos6502e"
 path = "src/bin/main.rs"
 
+[lib]
+name = "yamos6502"
+path = "src/lib/src/lib.rs"
+
 [dependencies]
-yamos6502 = { path = "src/lib"}
 
 clap = { version = "4", features = ["derive"] }
 clap-num = "1"

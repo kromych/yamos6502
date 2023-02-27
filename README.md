@@ -93,7 +93,7 @@ To run the 6502 functional tests and print staticstics every 15_000_000 instruct
 # 
 # `git clone https://github.com/Klaus2m5/6502_65C02_functional_tests ../6502_65C02_functional_tests
 #
- cargo run --release \
+cargo run --release \
     ../6502_65C02_functional_tests/bin_files/6502_functional_test.bin:0000 \
     --print-stats 15000000 \
     --reset-pc 0x400 \

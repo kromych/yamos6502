@@ -138,7 +138,7 @@ fn test_loads() {
     // Write the program to the memory
     memory.write(TEST_START, &program);
 
-    let mut mos6502 = Mos6502::new(&mut memory, StackWraparound::Disallow);
+    let mut mos6502 = Mos6502::new(memory, StackWraparound::Disallow);
     mos6502.set_reset_pending();
 
     assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::LDA(AddressMode::Immediate)));
@@ -291,23 +291,21 @@ fn test_stores() {
     // Write the program to the memory
     memory.write(TEST_START, &program);
 
-    {
-        let mut regf = RegisterFile::default();
-        *regf.a_mut() = 0xaf;
-        *regf.x_mut() = 0x1b;
-        *regf.y_mut() = 0x2c;
-        regf.set_pc(TEST_START);
+    let mut regf = RegisterFile::default();
+    *regf.a_mut() = 0xaf;
+    *regf.x_mut() = 0x1b;
+    *regf.y_mut() = 0x2c;
+    regf.set_pc(TEST_START);
 
-        let mut mos6502 = Mos6502::with_registers(&mut memory, regf, StackWraparound::Disallow);
+    let mut mos6502 = Mos6502::with_registers(memory, regf, StackWraparound::Disallow);
 
-        assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::STA(AddressMode::Absolute)));
-        assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::STA(AddressMode::AbsoluteX)));
-        assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::STA(AddressMode::AbsoluteY)));
-    }
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::STA(AddressMode::Absolute)));
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::STA(AddressMode::AbsoluteX)));
+    assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::STA(AddressMode::AbsoluteY)));
 
-    assert!(memory.read(ABSOLUTE_START).unwrap() == 0xaf);
-    assert!(memory.read(ABSOLUTE_START + 0x1b).unwrap() == 0xaf);
-    assert!(memory.read(ABSOLUTE_START + 0x2c).unwrap() == 0xaf);
+    assert!(mos6502.read_u8(ABSOLUTE_START).unwrap() == 0xaf);
+    assert!(mos6502.read_u8(ABSOLUTE_START + 0x1b).unwrap() == 0xaf);
+    assert!(mos6502.read_u8(ABSOLUTE_START + 0x2c).unwrap() == 0xaf);
 }
 
 #[test]
@@ -343,7 +341,7 @@ fn test_alu() {
     let mut regf = RegisterFile::default();
     regf.set_pc(TEST_START);
 
-    let mut mos6502 = Mos6502::with_registers(&mut memory, regf, StackWraparound::Disallow);
+    let mut mos6502 = Mos6502::with_registers(memory, regf, StackWraparound::Disallow);
 
     assert!(mos6502.run().unwrap() == RunExit::Executed(Insn::LDA(AddressMode::Immediate)));
     assert!(mos6502.registers().flag_set(Status::Zero));

@@ -138,8 +138,8 @@ fn main() -> anyhow::Result<()> {
 
     log::info!("Will exit at 0x{:04x?}", args.exit_pc);
 
-    let mut memory = RomRam::new(memory, args.rom_start);
-    let mut mos6502 = yamos6502::Mos6502::new(&mut memory, allow_stack_wraparound);
+    let memory = RomRam::new(memory, args.rom_start);
+    let mut mos6502 = yamos6502::Mos6502::new(memory, allow_stack_wraparound);
 
     log::info!("Running MOS 6502 emulator");
 

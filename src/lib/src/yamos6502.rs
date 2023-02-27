@@ -107,11 +107,11 @@ pub enum StackWraparound {
 
 /// Behavioral MOS 6502 emulator
 #[derive(Debug)]
-pub struct Mos6502<'memory, M>
+pub struct Mos6502<M>
 where
     M: Memory,
 {
-    mem: &'memory mut M,
+    mem: M,
     reg_file: RegisterFile,
     // The target might not provide better options than
     // plain atomic store and loads. Should be a room
@@ -125,11 +125,11 @@ where
     allow_stack_wraparound: StackWraparound,
 }
 
-impl<'memory, M> Mos6502<'memory, M>
+impl<M> Mos6502<M>
 where
     M: Memory,
 {
-    pub fn new(memory: &'memory mut M, allow_stack_wraparound: StackWraparound) -> Self {
+    pub fn new(memory: M, allow_stack_wraparound: StackWraparound) -> Self {
         Self {
             mem: memory,
             reg_file: RegisterFile::default(),
@@ -143,7 +143,7 @@ where
     }
 
     pub fn with_registers(
-        memory: &'memory mut M,
+        memory: M,
         regf: RegisterFile,
         allow_stack_wraparound: StackWraparound,
     ) -> Self {
@@ -175,15 +175,15 @@ where
         &self.reg_file
     }
 
-    fn read_u8(&self, addr: u16) -> Result<u8, RunError> {
+    pub fn read_u8(&self, addr: u16) -> Result<u8, RunError> {
         self.mem.read(addr).map_err(RunError::MemoryAccess)
     }
 
-    fn write_u8(&mut self, addr: u16, value: u8) -> Result<(), RunError> {
+    pub fn write_u8(&mut self, addr: u16, value: u8) -> Result<(), RunError> {
         self.mem.write(addr, value).map_err(RunError::MemoryAccess)
     }
 
-    fn read_u16(&self, addr: u16) -> Result<u16, RunError> {
+    pub fn read_u16(&self, addr: u16) -> Result<u16, RunError> {
         let lo = self.mem.read(addr).map_err(RunError::MemoryAccess)?;
         let hi = self
             .mem
@@ -191,6 +191,17 @@ where
             .map_err(RunError::MemoryAccess)?;
 
         Ok(u16::from_le_bytes([lo, hi]))
+    }
+
+    pub fn write_u16(&mut self, addr: u16, value: u16) -> Result<(), RunError> {
+        self.mem
+            .write(addr, value as u8)
+            .map_err(RunError::MemoryAccess)?;
+        self.mem
+            .write(addr.wrapping_add(1), (value >> 8) as u8)
+            .map_err(RunError::MemoryAccess)?;
+
+        Ok(())
     }
 
     /// Computes the effective address. Expects the program counter being advanced past

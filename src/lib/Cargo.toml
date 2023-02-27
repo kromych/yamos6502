@@ -7,4 +7,6 @@ edition = "2021"
 name = "yamos6502"
 path = "src/lib.rs"
 
-[dependencies]
+[features]
+default = ["std"]
+std = []

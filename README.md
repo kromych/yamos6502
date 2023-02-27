@@ -42,6 +42,20 @@ will not continue execution until it is reset.
 It goes without saying that the glitches at the physical layer are not emulated,
 too :)
 
+## Usage
+
+Add
+
+```toml
+yamos6502 = "0.1"
+```
+
+to your project's `Cargo.toml`. If you intend not to depend on the `std` crate, here is the syntax to use instead:
+
+```toml
+yamos6502 = { version = "0.1", default_features = false }
+```
+
 ## Examples
 
 ### `yamos6502e`

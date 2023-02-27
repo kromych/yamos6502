@@ -5,7 +5,7 @@
 /// Each 8-bit opcode below is split into 6 bits that
 /// represent Operation and Adressing Mode, and 2 bits that
 /// indicate the instruction group.
-const INSN_STR: [&'static str; 256] = [
+const INSN_STR: [&str; 256] = [
     // Mnemonic     Opcode
     "BRK",       // 0x00    0b000000    0b00
     "ORA X,ind", // 0x01    0b000000    0b01

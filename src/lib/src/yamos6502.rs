@@ -33,6 +33,12 @@ pub enum MemoryError {
     ReadOnlyAddress(u16),
 }
 
+impl core::fmt::Display for MemoryError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{self:04x?}")
+    }
+}
+
 /// No more than 64 KiB of memory is supported
 pub const MAX_MEMORY_SIZE: usize = u16::MAX as usize + 1;
 
@@ -84,6 +90,12 @@ pub enum RunError {
     StackUnderflow,
     /// Error occured when accessing the memory
     MemoryAccess(MemoryError),
+}
+
+impl core::fmt::Display for RunError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{self:04x?}")
+    }
 }
 
 /// Stack wraparound policy
@@ -628,7 +640,9 @@ where
 
                 r
             } else {
-                let mut r  = bcd_to_u8(a).wrapping_sub(bcd_to_u8(v)).wrapping_sub(borrow_in) as i8;
+                let mut r = bcd_to_u8(a)
+                    .wrapping_sub(bcd_to_u8(v))
+                    .wrapping_sub(borrow_in) as i8;
                 borrow_out = r < 0;
                 if borrow_out {
                     r += 100;
@@ -852,3 +866,12 @@ where
         }
     }
 }
+
+#[cfg(feature = "std")]
+extern crate std;
+
+#[cfg(feature = "std")]
+impl std::error::Error for MemoryError {}
+
+#[cfg(feature = "std")]
+impl std::error::Error for RunError {}

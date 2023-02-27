@@ -12,9 +12,12 @@ name = "yamos6502"
 path = "src/lib/src/lib.rs"
 
 [dependencies]
-
 clap = { version = "4", features = ["derive"] }
 clap-num = "1"
 env_logger = "0.10"
 log = "0.4"
 anyhow = "1"
+
+[features]
+default = ["std"]
+std = []

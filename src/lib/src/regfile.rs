@@ -9,23 +9,23 @@ use core::fmt::Debug;
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
-    /// N	Negative
+    /// N: Negative
     Negative = 7,
-    /// V	Overflow
+    /// V: Overflow
     Overflow = 6,
     /// -   Ignored (in the register, hardwired to the logic `1`)
     AlwaysSet = 5,
-    /// B	Break (is never set in the register,
-    ///            only in the register value pushed on the stack which
-    ///            happens when executing BRK)
+    /// B: Break (is never set in the register,
+    ///           only in the register value pushed on the stack which
+    ///           happens when executing BRK)
     Break = 4,
-    /// D	Decimal (use BCD for arithmetics), cleared on reset
+    /// D: Decimal (use BCD for arithmetics), cleared on reset
     Decimal = 3,
-    /// I	Interrupt (IRQ) disable, set on reset
+    /// I: Interrupt (IRQ) disable, set on reset
     InterruptDisable = 2,
-    /// Z	Zero
+    /// Z: Zero
     Zero = 1,
-    /// C	Carry
+    /// C: Carry
     Carry = 0,
 }
 
@@ -143,7 +143,7 @@ impl RegisterFile {
 
     #[inline]
     pub fn adjust_pc_by(&mut self, offset: i8) {
-        self.pc = self.pc.wrapping_add(offset as i16 as u16).into();
+        self.pc = self.pc.wrapping_add(offset as i16 as u16);
     }
 
     #[inline]

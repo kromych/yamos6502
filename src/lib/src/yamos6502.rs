@@ -175,6 +175,10 @@ where
         &self.reg_file
     }
 
+    pub fn registers_mut(&mut self) -> &mut RegisterFile {
+        &mut self.reg_file
+    }
+
     pub fn read_u8(&self, addr: u16) -> Result<u8, RunError> {
         self.mem.read(addr).map_err(RunError::MemoryAccess)
     }

@@ -41,7 +41,7 @@ impl Memory for TestMemory {
         Ok(self.bytes[addr as usize] = value)
     }
 
-    fn read(&self, addr: u16) -> Result<u8, crate::MemoryError> {
+    fn read(&mut self, addr: u16) -> Result<u8, crate::MemoryError> {
         Ok(self.bytes[addr as usize])
     }
 }

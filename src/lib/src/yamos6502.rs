@@ -45,7 +45,7 @@ pub const MAX_MEMORY_SIZE: usize = u16::MAX as usize + 1;
 /// A 16-bit addressable, 8-bit cell memory
 pub trait Memory {
     fn write(&mut self, addr: u16, value: u8) -> Result<(), MemoryError>;
-    fn read(&self, addr: u16) -> Result<u8, MemoryError>;
+    fn read(&mut self, addr: u16) -> Result<u8, MemoryError>;
 }
 
 /// When an interrupt is signaled (hardware or the software via BRK),
@@ -179,7 +179,7 @@ where
         &mut self.reg_file
     }
 
-    pub fn read_u8(&self, addr: u16) -> Result<u8, RunError> {
+    pub fn read_u8(&mut self, addr: u16) -> Result<u8, RunError> {
         self.mem.read(addr).map_err(RunError::MemoryAccess)
     }
 
@@ -187,7 +187,7 @@ where
         self.mem.write(addr, value).map_err(RunError::MemoryAccess)
     }
 
-    pub fn read_u16(&self, addr: u16) -> Result<u16, RunError> {
+    pub fn read_u16(&mut self, addr: u16) -> Result<u16, RunError> {
         let lo = self.mem.read(addr).map_err(RunError::MemoryAccess)?;
         let hi = self
             .mem
@@ -705,7 +705,8 @@ where
                 self.stack_push_u8(p | Status::Break.mask() | Status::AlwaysSet.mask())?;
                 // Disable interrupts
                 self.reg_file.set_flag(Status::InterruptDisable);
-                self.reg_file.set_pc(self.read_u16(IRQ_BRK_VECTOR)?);
+                let new_pc = self.read_u16(IRQ_BRK_VECTOR)?;
+                self.reg_file.set_pc(new_pc);
             }
             Insn::BCC(addr_mode) => self.branch(addr_mode, !self.flag_set(Status::Carry))?,
             Insn::BCS(addr_mode) => self.branch(addr_mode, self.flag_set(Status::Carry))?,
@@ -831,7 +832,8 @@ where
         // Handle reset.
         // The real processor can't/won't deaasert the line.
         if self.reset_pending.load(Ordering::Acquire) {
-            self.reg_file.set_pc(self.read_u16(RESET_VECTOR)?);
+            let new_pc = self.read_u16(RESET_VECTOR)?;
+            self.reg_file.set_pc(new_pc);
             self.fault = None;
             self.reg_file.reset();
             self.reset_pending.store(false, Ordering::Release);
@@ -851,7 +853,8 @@ where
             let p = self.reg_file.reg(Register::P);
             self.stack_push_u8(p & !Status::Break.mask() | Status::AlwaysSet.mask())?;
 
-            self.reg_file.set_pc(self.read_u16(NMI_VECTOR)?);
+            let new_pc = self.read_u16(NMI_VECTOR)?;
+            self.reg_file.set_pc(new_pc);
             self.nmi_pending.store(false, Ordering::Release);
 
             return Ok(RunExit::NonMaskableInterrupt);
@@ -863,7 +866,8 @@ where
             let p = self.reg_file.reg(Register::P);
             self.stack_push_u8(p & !Status::Break.mask() | Status::AlwaysSet.mask())?;
 
-            self.reg_file.set_pc(self.read_u16(IRQ_BRK_VECTOR)?);
+            let new_pc = self.read_u16(IRQ_BRK_VECTOR)?;
+            self.reg_file.set_pc(new_pc);
             self.irq_pending.store(false, Ordering::Release);
 
             return Ok(RunExit::Interrupt);

@@ -68,7 +68,7 @@ impl Memory for RomRam {
         Ok(())
     }
 
-    fn read(&self, addr: u16) -> Result<u8, yamos6502::MemoryError> {
+    fn read(&mut self, addr: u16) -> Result<u8, yamos6502::MemoryError> {
         if addr as usize > self.cells.len() {
             return Err(yamos6502::MemoryError::BadAddress(addr));
         }

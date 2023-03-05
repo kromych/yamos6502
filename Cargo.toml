@@ -2,6 +2,14 @@
 name = "yamos6502"
 version = "0.1.0"
 edition = "2021"
+authors = ["kromych@github.com"]
+description = "MOS 6502 emulator"
+homepage = "https://github.com/kromych/yamos6502"
+repository = "https://github.com/kromych/yamos6502"
+readme = "Readme.md"
+keywords = ["emulator", "6502", "no-std"]
+categories = ["command-line-utilities"]
+license = "MIT"
 
 [[bin]]
 name = "yamos6502e"

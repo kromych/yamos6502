@@ -124,6 +124,7 @@ cargo run --release \
 2. [Wide NES](https://github.com/daniel5151/ANESE)
 3. [My Little 6502](https://github.com/C-Chads/MyLittle6502)
 4. [MCS6502](https://github.com/bzotto/MCS6502)
+5. [6502](https://github.com/jefftranter/6502)
 
 ### Hardware simulators
 

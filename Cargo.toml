@@ -1,6 +1,6 @@
 [package]
 name = "yamos6502"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["kromych@github.com"]
 description = "MOS 6502 emulator"
@@ -8,7 +8,7 @@ homepage = "https://github.com/kromych/yamos6502"
 repository = "https://github.com/kromych/yamos6502"
 readme = "README.md"
 keywords = ["emulator", "6502", "no-std"]
-categories = ["command-line-utilities"]
+categories = ["command-line-utilities", "emulators", "no-std", "embedded"]
 license = "MIT"
 
 [lib]

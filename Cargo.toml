@@ -11,15 +11,11 @@ keywords = ["emulator", "6502", "no-std"]
 categories = ["command-line-utilities"]
 license = "MIT"
 
-[[bin]]
-name = "yamos6502e"
-path = "src/bin/main.rs"
-
 [lib]
 name = "yamos6502"
-path = "src/lib/src/lib.rs"
+path = "src/lib.rs"
 
-[dependencies]
+[dev-dependencies]
 clap = { version = "4", features = ["derive"] }
 clap-num = "1"
 env_logger = "0.10"

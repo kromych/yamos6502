@@ -116,6 +116,9 @@ cargo run --example yamos6502e  \
     --dead-loop-iterations 16
 ```
 
+Building with `--release` produces a much faster emulator at the cost of omitting some runtime
+checks.
+
 ## The 6502-related resources and projects I have found inspiration in
 
 ### Emulators

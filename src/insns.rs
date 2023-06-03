@@ -1,4 +1,4 @@
-///! Instruction Data
+//! Instruction Data
 
 /// String representation for instructions.
 ///
